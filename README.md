@@ -30,18 +30,57 @@ TOTAL CASH                     $100,479
 Revenue, gross profit, contribution profit, operating profit, cash, and available cash
 are treated as six different numbers, never as synonyms.
 
-## Running it
+## Getting it on your Mac
+
+The code lives on the branch `claude/ecommerce-bi-dashboard-zyabvf`. Nothing is running
+anywhere you can reach yet — you run it locally.
 
 ```bash
+git clone https://github.com/waterborn26/BUSINESS-DASHBOARD.git
+cd BUSINESS-DASHBOARD
+git checkout claude/ecommerce-bi-dashboard-zyabvf
 npm install
-npm run dev          # UI in the browser at localhost:1420
-npm run tauri dev    # full macOS desktop app (requires the Rust toolchain)
-npm test             # 33 financial-correctness tests
-npm run build        # production bundle
 ```
 
-The app ships with a **deterministic simulated business** — 445 days of a real-feeling
-brand — so every screen is fully populated before a single API key is entered.
+### Fastest look — in a browser (no Rust needed)
+
+```bash
+npm run dev          # → http://localhost:1420
+```
+
+Everything works here: all 27 screens, the demo dataset, ⌘K, drilldowns, both themes.
+This is the quickest way to see it.
+
+### The actual macOS desktop app
+
+Needs the Rust toolchain once:
+
+```bash
+xcode-select --install                                   # Apple build tools
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh   # Rust
+```
+
+Then:
+
+```bash
+npm run tauri dev     # live desktop app with hot reload
+npm run tauri build   # produces a real .app + .dmg
+```
+
+The built app lands in `src-tauri/target/release/bundle/` — `macos/Meridian.app`
+(drag to Applications) and `dmg/Meridian_0.1.0_aarch64.dmg`.
+
+The first `tauri build` compiles the whole Rust dependency tree and takes several
+minutes; later builds are fast. The app is unsigned, so the first launch needs
+right-click → Open (or System Settings → Privacy & Security → Open Anyway).
+
+### Other commands
+
+```bash
+npm test         # 39 financial-correctness tests
+npm run typecheck
+npm run build    # production web bundle
+```
 
 ## Architecture in one screen
 
@@ -78,9 +117,10 @@ All 27 sections are functional against the simulated dataset:
 
 Highlights:
 
-- **Command Center** — daily briefing, 18 KPIs with comparisons, what changed / why /
-  what's next / where is my money / **what should I do**, ranked by
-  `impact × confidence × urgency ÷ difficulty`.
+- **Command Center** — a health gauge and briefing, one hero figure (available cash) with
+  its composition meter, stat tiles carrying 30-day trend, what changed / why / what's
+  next / where is my money / **what should I do** ranked by
+  `impact × confidence × urgency ÷ difficulty`, and all 28 KPIs grouped below.
 - **Double-entry ledger** — every sale, fee, refund, payout, PO, bill, tax remittance and
   owner draw is a balanced journal entry. Trial balance is asserted to be exactly zero.
 - **Inventory accounting** — FIFO lots with landed cost (manufacturing + packaging +
@@ -97,7 +137,7 @@ Highlights:
 
 ## Financial correctness is tested, not asserted
 
-`npm test` runs 33 tests covering ledger integrity, business plausibility, forecast
+`npm test` runs 39 tests covering ledger integrity, business plausibility, forecast
 behavior, scenario modelling, and every demo storyline:
 
 - trial balance is exactly 0; cash-flow statement ties opening + O + I + F = closing
@@ -108,6 +148,11 @@ behavior, scenario modelling, and every demo storyline:
 - the forecast never double-counts commitments into negative available cash
 - the briefing never claims "performance is strong" while revenue is falling
 - no recommendation ever proposes a zero-quantity action
+- an inverted metric (ad spend, CAC, refunds) is never praised for moving the wrong way
+
+The Rust shell compiles clean and the SQLite migration applies (32 tables, 15 indexes);
+both were verified on Linux, where Tauri needs GTK/WebKit. The macOS `.app`/`.dmg`
+bundling step itself can only be exercised on a Mac.
 
 ## Honest limitations
 
