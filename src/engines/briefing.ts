@@ -32,6 +32,7 @@ export interface Briefing {
 
 export function dailyBriefing(store: Store): Briefing {
   const today = store.today;
+  const cap = store.capabilities;
   const last30: Period = { start: addDays(today, -29), end: today };
   const cmp = compare(store, last30);
   const yesterday = periodTotals(store, { start: addDays(today, -1), end: addDays(today, -1) });
@@ -42,13 +43,19 @@ export function dailyBriefing(store: Store): Briefing {
   const itx = estimatedIncomeTaxReserveGap(store, today);
   const recs = recommendations(store);
   const fc = cashForecast(store, 90);
-  const top = productStats(store, { start: addDays(today, -13), end: today })[0];
+  // Shopify reports sales for deleted products under a blank title. That bucket is
+  // real revenue but not a product you can act on, so it never leads the briefing.
+  const top = productStats(store, { start: addDays(today, -13), end: today })
+    .find((x) => x.name && !x.name.startsWith("(untitled"));
   const stockRisk = inventoryRows(store).find((r) => r.health === "Stockout risk");
 
   const yDev = avg30 > 0 ? (yesterday.netRevenue - avg30) / avg30 : 0;
   const growth = cmp.previous.netRevenue > 0
     ? (cmp.current.netRevenue - cmp.previous.netRevenue) / cmp.previous.netRevenue : 0;
-  const yoy = cmp.yearAgo.netRevenue > 0
+  // A percentage move off a trivially small base is arithmetic, not insight: "+233%"
+  // on $15 of prior-year revenue tells the reader nothing true about the business.
+  const YOY_MIN_BASE = 100_000; // $1,000
+  const yoy = cmp.yearAgo.netRevenue >= YOY_MIN_BASE
     ? (cmp.current.netRevenue - cmp.yearAgo.netRevenue) / cmp.yearAgo.netRevenue : 0;
 
   // Lead with the 30-day trend (the real signal), not a single day. A single strong or
@@ -72,16 +79,28 @@ export function dailyBriefing(store: Store): Briefing {
       (top ? `, led by ${top.name}` : "") + ".",
     );
   }
-  parts.push(
-    `Contribution margin is ${fmtPct(cmp.current.contributionMarginPct, 0)}` +
-    (Math.abs(yDev) > 0.15
-      ? `, and yesterday ran ${fmtPct(Math.abs(yDev), 0)} ${yDev > 0 ? "above" : "below"} the 30-day daily average.`
-      : "."),
-  );
+  // Only claim a margin when costs are actually known. With no COGS data every sale
+  // looks like 100% margin, which is the most misleading number the app could print.
+  if (cap.cogs) {
+    parts.push(
+      `Contribution margin is ${fmtPct(cmp.current.contributionMarginPct, 0)}` +
+      (Math.abs(yDev) > 0.15
+        ? `, and yesterday ran ${fmtPct(Math.abs(yDev), 0)} ${yDev > 0 ? "above" : "below"} the 30-day daily average.`
+        : "."),
+    );
+  } else {
+    parts.push(
+      `Profit and margin are not calculated yet — no product costs are connected, so revenue is the only figure Meridian can stand behind.`,
+    );
+  }
   const metaCac = insights.find((i) => i.id === "meta-cac-rise");
   if (metaCac) parts.push(`Paid acquisition costs are rising: ${metaCac.title}.`);
   if (stockRisk) parts.push(`${stockRisk.name} is projected to sell out in ~${Math.round(stockRisk.daysOfSupply)} days.`);
-  parts.push(`Current sales-tax liability is ${fmtUsd(stx.currentPayable)}; available operating cash is ${fmtUsd(cash.availableCash)} of ${fmtUsd(cash.totalCash)} total cash.`);
+  if (cash.cashKnown) {
+    parts.push(`Current sales-tax liability is ${fmtUsd(stx.currentPayable)}; available operating cash is ${fmtUsd(cash.availableCash)} of ${fmtUsd(cash.totalCash)} total cash.`);
+  } else {
+    parts.push(`${fmtUsd(stx.currentPayable)} of sales tax has been collected and is owed. Cash on hand is unknown — connect a bank account to see what is actually available.`);
+  }
 
   return {
     headline: parts.join(" "),
@@ -90,8 +109,8 @@ export function dailyBriefing(store: Store): Briefing {
     opportunities: insights.filter((i) => i.kind === "opportunity"),
     risks: insights.filter((i) => i.kind === "risk"),
     financialPosition: [
-      { label: "Cash on hand", value: fmtUsd(cash.totalCash) },
-      { label: "Actually available", value: fmtUsd(cash.availableCash), tone: "good" },
+      { label: "Cash on hand", value: cash.cashKnown ? fmtUsd(cash.totalCash) : "not connected" },
+      { label: "Actually available", value: cash.cashKnown ? fmtUsd(cash.availableCash) : "not connected", tone: cash.cashKnown ? "good" : "neutral" },
       { label: "Sales tax owed", value: fmtUsd(stx.currentPayable), tone: "bad" },
       { label: "Est. income-tax reserve", value: fmtUsd(itx.reserveTarget), tone: "bad", estimate: true },
       { label: "Credit card balance", value: fmtUsd(cash.deductions.find((d) => d.label.startsWith("Credit"))?.amount ?? 0), tone: "bad" },
@@ -123,6 +142,13 @@ export function answerQuestion(store: Store, q: string): AnalystAnswer {
   const cash = availableCash(store, today);
 
   if (/(how much money|actually have|safe to spend|available)/.test(s)) {
+    if (!cash.cashKnown) {
+      return {
+        answer: `I can't answer that yet — no bank, card or processor account is connected, so Meridian has no view of your cash. What I do know from Shopify: ${fmtUsd(cash.obligationsTotal)} of obligations are already committed, of which ${fmtUsd(cash.deductions[0]?.amount ?? 0)} is sales tax you have collected and owe. Connect a bank feed or enter balances manually and this becomes a real number.`,
+        citations: cash.deductions.filter((d) => d.amount > 0).map((d) => ({ label: d.label, value: fmtUsd(d.amount) })),
+        periodUsed: `As of ${fmtDate(today)}`,
+      };
+    }
     return {
       answer: `You have ${fmtUsd(cash.totalCash)} across cash accounts, but ${fmtUsd(cash.availableCash)} is actually available to spend. The difference is money already spoken for: ${cash.deductions.map((d) => `${d.label} ${fmtUsd(d.amount)}`).join("; ")}. There is also ${fmtUsd(cash.inTransit.amount)} in processor clearing on its way to the bank.`,
       citations: cash.deductions.map((d) => ({ label: d.label, value: fmtUsd(d.amount) })),

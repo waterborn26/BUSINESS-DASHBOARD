@@ -19,6 +19,14 @@ export interface CashLine {
 
 export interface AvailableCashBreakdown {
   asOf: string;
+  /**
+   * False when no cash account is connected. Total and available cash are then
+   * meaningless and must be rendered as "not available" — never as $0, and never as
+   * a negative figure produced by subtracting real obligations from unknown cash.
+   */
+  cashKnown: boolean;
+  /** Obligations are real and knowable even when the cash side is not. */
+  obligationsTotal: number;
   cashAccounts: CashLine[];
   totalCash: number;
   inTransit: CashLine;      // processor clearing — exists but not yet in the bank
@@ -86,9 +94,14 @@ export function availableCash(store: Store, asOf: string): AvailableCashBreakdow
     { label: "Next-30-day fixed obligations", amount: upcomingFixed, provenance: "computed", detail: "Subscriptions, contractors, payroll, rent, insurance, loan payment", drill: { kind: "expenses" } },
   ];
 
-  const available = total - deductions.reduce((t, d) => t + d.amount, 0);
+  const obligationsTotal = deductions.reduce((t, d) => t + d.amount, 0);
+  const cashKnown = cashAccounts.length > 0;
+  // With no cash source, "available" is not a number we are entitled to state.
+  const available = cashKnown ? total - obligationsTotal : 0;
   return {
     asOf,
+    cashKnown,
+    obligationsTotal,
     cashAccounts,
     totalCash: total,
     inTransit: { label: "Processor clearing (in transit)", amount: clearing, provenance: "computed", detail: "Recent sales not yet paid out by Shopify Payments" },

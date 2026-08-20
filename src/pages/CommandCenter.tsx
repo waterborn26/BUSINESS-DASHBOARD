@@ -86,6 +86,7 @@ export default function CommandCenter() {
 
   const c = cmp.current;
   const p = cmp.previous;
+  const cap = store.capabilities;
 
   // Total cash split into what is committed vs what is genuinely yours.
   const cashSegments: MeterSegment[] = useMemo(() => [
@@ -110,7 +111,7 @@ export default function CommandCenter() {
       <Card>
         <div style={{ display: "flex", gap: 22, alignItems: "center", flexWrap: "wrap" }}>
           <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2 }}>
-            <Gauge value={health.total} size={128} label="HEALTH" />
+            <Gauge value={health.total} size={128} label={health.coverage >= 0.99 ? "HEALTH" : "PARTIAL"} />
             <button className="btn" style={{ fontSize: 11, padding: "2px 8px" }} onClick={openHealthDrill}>
               Why?
             </button>
@@ -146,18 +147,36 @@ export default function CommandCenter() {
         <Card>
           <div style={{ display: "flex", alignItems: "flex-start", gap: 18, flexWrap: "wrap" }}>
             <div>
-              <div className="stat-label">Available to spend right now</div>
-              <div className="hero-figure">{fmtUsd(cash.availableCash)}</div>
-              <div className="hero-sub">
-                of {fmtUsd(cash.totalCash)} total cash ·{" "}
-                <a className="link" onClick={openAvailableCashDrill}>why? →</a>
+              {cash.cashKnown ? (
+                <>
+                  <div className="stat-label">Available to spend right now</div>
+                  <div className="hero-figure">{fmtUsd(cash.availableCash)}</div>
+                  <div className="hero-sub">
+                    of {fmtUsd(cash.totalCash)} total cash ·{" "}
+                    <a className="link" onClick={openAvailableCashDrill}>why? →</a>
+                  </div>
+                </>
+              ) : (
+                <>
+                  {/* No bank feed: subtracting real obligations from unknown cash would
+                      print a confident deficit that is not true. State what is known. */}
+                  <div className="stat-label">Committed and already owed</div>
+                  <div className="hero-figure">{fmtUsd(cash.obligationsTotal)}</div>
+                  <div className="hero-sub">
+                    Cash on hand is <strong>not connected</strong>, so available cash cannot be
+                    calculated ·{" "}
+                    <a className="link" onClick={() => app.navigate("datasources")}>connect an account →</a>
+                  </div>
+                </>
+              )}
+            </div>
+            {cash.cashKnown && cash.inTransit.amount !== 0 && (
+              <div style={{ marginLeft: "auto", textAlign: "right" }}>
+                <div className="stat-label" style={{ justifyContent: "flex-end" }}>In transit</div>
+                <div className="stat-value" style={{ fontSize: 20 }}>{fmtUsdCompact(cash.inTransit.amount)}</div>
+                <div className="hero-sub">not yet settled</div>
               </div>
-            </div>
-            <div style={{ marginLeft: "auto", textAlign: "right" }}>
-              <div className="stat-label" style={{ justifyContent: "flex-end" }}>In transit</div>
-              <div className="stat-value" style={{ fontSize: 20 }}>{fmtUsdCompact(cash.inTransit.amount)}</div>
-              <div className="hero-sub">settles in ~2 days</div>
-            </div>
+            )}
           </div>
           <div style={{ marginTop: 18 }}>
             <SplitMeter
@@ -167,10 +186,11 @@ export default function CommandCenter() {
             />
           </div>
           <p className="muted" style={{ fontSize: 11.5, marginTop: 12 }}>
-            Every blue segment is money that already belongs to someone else — tax
-            authorities, vendors, your card. Only the green is yours to deploy.
+            {cash.cashKnown
+              ? "Every blue segment is money that already belongs to someone else — tax authorities, vendors, your card. Only the green is yours to deploy."
+              : "These are obligations Meridian can see from Shopify. Without a bank connection it cannot tell you whether your cash covers them."}
           </p>
-          <div style={{ marginTop: 14 }}>
+          {cash.cashKnown && <div style={{ marginTop: 14 }}>
             <div className="band-title" style={{ marginBottom: 8 }}>
               Projected available cash <span className="badge estimate">est.</span>
             </div>
@@ -189,9 +209,31 @@ export default function CommandCenter() {
                 ? ` — below your ${fmtUsdCompact(CASH_FLOOR)} floor.`
                 : ` — stays above your ${fmtUsdCompact(CASH_FLOOR)} floor.`}
             </p>
-          </div>
+          </div>}
         </Card>
 
+        {!cash.cashKnown ? (
+          <Card title="What's missing">
+            <p className="muted" style={{ fontSize: 12.5, lineHeight: 1.6 }}>
+              Shopify tells Meridian what you sold. It cannot tell you what you kept.
+              These connections turn revenue into a full financial picture:
+            </p>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 12 }}>
+              {MISSING_SOURCES.map((m) => (
+                <div key={m.title} style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
+                  <span className="dot" style={{ background: "var(--warning)", width: 7, height: 7, borderRadius: "50%", marginTop: 6, flexShrink: 0 }} />
+                  <div>
+                    <div style={{ fontSize: 12.5, fontWeight: 600 }}>{m.title}</div>
+                    <div className="muted" style={{ fontSize: 11.5 }}>{m.unlocks}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <button className="btn primary" style={{ marginTop: 14 }} onClick={() => app.navigate("datasources")}>
+              Open Data Sources →
+            </button>
+          </Card>
+        ) : (
         <Card title="90-day cash outlook" right={<span className="badge estimate">est.</span>}>
           <LineChart
             labels={fc.points.map((pt) => pt.date)}
@@ -212,6 +254,7 @@ export default function CommandCenter() {
             </div>
           )}
         </Card>
+        )}
       </div>
 
       {/* ── Performance stat tiles ──────────────────────── */}
@@ -221,17 +264,27 @@ export default function CommandCenter() {
           current={c.netRevenue} base={p.netRevenue}
           note={<span className="muted">{fmtUsdCompact(c.netRevenue / 30)}/day avg</span>}
           onClick={() => app.navigate("sales")} size="lg" />
-        <StatTile label="Contribution profit" value={fmtUsdCompact(c.contributionProfit)} spark={spark.contribution_profit}
-          current={c.contributionProfit} base={p.contributionProfit} accent="var(--s3)"
-          note={<span className="muted">{fmtPct(c.contributionMarginPct, 0)} margin</span>}
-          onClick={() => app.navigate("pnl")} size="lg" />
+        {cap.cogs ? (
+          <StatTile label="Contribution profit" value={fmtUsdCompact(c.contributionProfit)} spark={spark.contribution_profit}
+            current={c.contributionProfit} base={p.contributionProfit} accent="var(--s3)"
+            note={<span className="muted">{fmtPct(c.contributionMarginPct, 0)} margin</span>}
+            onClick={() => app.navigate("pnl")} size="lg" />
+        ) : (
+          <UnknownTile label="Contribution profit" needs="product costs"
+            onClick={() => app.navigate("datasources")} />
+        )}
         <StatTile label="Orders" value={fmtNum(c.orders)} spark={spark.orders}
           current={c.orders} base={p.orders} note={<span className="muted">AOV {fmtUsd(c.aov)}</span>}
           onClick={() => app.navigate("sales")} size="lg" />
-        <StatTile label="Conversion rate" value={fmtPct(c.conversion, 2)} spark={spark.conversion}
-          current={c.conversion} base={p.conversion} accent="var(--s4)"
-          note={<span className="muted">{fmtNum(c.sessions)} sessions</span>}
-          onClick={() => app.navigate("website")} size="lg" />
+        {cap.sessions ? (
+          <StatTile label="Conversion rate" value={fmtPct(c.conversion, 2)} spark={spark.conversion}
+            current={c.conversion} base={p.conversion} accent="var(--s4)"
+            note={<span className="muted">{fmtNum(c.sessions)} sessions</span>}
+            onClick={() => app.navigate("website")} size="lg" />
+        ) : (
+          <UnknownTile label="Conversion rate" needs="web analytics"
+            onClick={() => app.navigate("datasources")} />
+        )}
       </div>
 
       {/* ── Revenue + forecast ──────────────────────────── */}
@@ -380,6 +433,15 @@ export default function CommandCenter() {
       subtitle: "Weighted component scores — nothing arbitrary",
       body: (
         <>
+          {health.coverage < 0.99 && (
+            <div className="insight warning" style={{ marginBottom: 12 }}>
+              <div className="insight-detail">
+                Scored on {Math.round(health.coverage * 100)}% of the full model. Not measured:{" "}
+                {health.unavailable.map((u) => u.label).join(", ")} — each needs{" "}
+                {[...new Set(health.unavailable.map((u) => u.needs))].join(" / ")}.
+              </div>
+            </div>
+          )}
           <ScoreBars items={health.components} />
           <div className="stmt" style={{ marginTop: 16 }}>
             {health.components.map((comp) => (
@@ -423,6 +485,28 @@ export default function CommandCenter() {
 }
 
 // ── Sub-components ───────────────────────────────────────
+
+/** A metric the connected data genuinely cannot support — never a fake zero. */
+function UnknownTile({ label, needs, onClick }: { label: string; needs: string; onClick: () => void }) {
+  return (
+    <div className="stat clickable" onClick={onClick}>
+      <div className="stat-label">{label}</div>
+      <div className="stat-body">
+        <div className="stat-value lg" style={{ color: "var(--ink-3)" }}>—</div>
+      </div>
+      <div className="stat-foot">
+        <span className="badge warning">needs {needs}</span>
+      </div>
+    </div>
+  );
+}
+
+const MISSING_SOURCES = [
+  { title: "Bank or card account", unlocks: "Cash, available cash, runway and the cash-flow forecast" },
+  { title: "Product costs", unlocks: "Gross profit, margin, contribution and true product ranking" },
+  { title: "Web analytics", unlocks: "Sessions, conversion rate and the purchase funnel" },
+  { title: "Ad platforms", unlocks: "CAC, ROAS, MER and profit per ad dollar" },
+];
 
 function MiniStat({ label, value, sub, tone }: { label: string; value: string; sub?: string; tone?: "good" | "bad" }) {
   return (

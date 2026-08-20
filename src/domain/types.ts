@@ -339,3 +339,47 @@ export interface ConnectorState {
   lastSync?: string;
   detail?: string;
 }
+
+// ───────── Data capabilities ─────────
+
+/**
+ * What a dataset actually knows. Absence of data is NOT zero: a store with no bank
+ * feed does not have $0 of cash, it has an unknown amount, and every figure derived
+ * from it must say so rather than compute a confident number from nothing.
+ */
+export interface Capabilities {
+  /** Bank / card / processor balances are known. Gates cash and available cash. */
+  cash: boolean;
+  /** Per-unit product cost is known. Gates COGS, gross profit and every margin. */
+  cogs: boolean;
+  /** Web analytics connected. Gates sessions, conversion, funnel, revenue/session. */
+  sessions: boolean;
+  /** Ad platforms connected. Gates spend, CAC, ROAS, MER. */
+  adSpend: boolean;
+  /** Customer-level identity is present. Gates cohorts, LTV, repeat rate. */
+  customers: boolean;
+  /** Stock levels are known. Gates inventory value, velocity and reorder planning. */
+  inventory: boolean;
+  /** Operating expenses are recorded. Gates operating profit and expense analysis. */
+  expenses: boolean;
+  /** Per-line unit quantities are known. Gates units sold and items per order. */
+  units: boolean;
+}
+
+/** Everything present — the demo dataset simulates a fully connected business. */
+export const ALL_CAPABILITIES: Capabilities = {
+  cash: true, cogs: true, sessions: true, adSpend: true,
+  customers: true, inventory: true, expenses: true, units: true,
+};
+
+/** Human-readable reason a metric is unavailable, and what would fix it. */
+export const CAPABILITY_LABELS: Record<keyof Capabilities, { needs: string; gates: string }> = {
+  cash: { needs: "a bank or card connection", gates: "cash, available cash and runway" },
+  cogs: { needs: "product costs", gates: "gross profit, margin and contribution" },
+  sessions: { needs: "web analytics", gates: "sessions, conversion and the funnel" },
+  adSpend: { needs: "an ad platform connection", gates: "CAC, ROAS and MER" },
+  customers: { needs: "customer-level data", gates: "cohorts, LTV and repeat rate" },
+  inventory: { needs: "stock levels", gates: "inventory value and reorder planning" },
+  expenses: { needs: "expense records", gates: "operating profit and expense analysis" },
+  units: { needs: "line-item quantities", gates: "units sold and items per order" },
+};

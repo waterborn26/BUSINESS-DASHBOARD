@@ -25,8 +25,11 @@ import type {
   MarketingSpendDaily, Order, OrderItem, Product, PurchaseOrder, RecurringExpense, RollupDay,
   Sku, SocialPost, TaxLiability, TaxPayment, TrafficDaily,
 } from "@/domain/types";
+import { ALL_CAPABILITIES, type Capabilities } from "@/domain/types";
 
 export interface Dataset {
+  /** What this dataset actually knows — see domain/types Capabilities. */
+  capabilities: Capabilities;
   today: string;
   start: string;
   days: string[];
@@ -1011,6 +1014,7 @@ export function generateDataset(todayIso?: string): Dataset {
   ];
 
   return {
+    capabilities: ALL_CAPABILITIES,
     today, start, days, siteUpdateDay,
     products, skus, customers, orders, ordersByDate, rollups,
     lots, purchaseOrders, bills, recurring: recurringDefs, taxLiabilities, taxPayments,

@@ -223,10 +223,26 @@ export function detectInsights(store: Store): Insight[] {
     const stx = salesTaxSummary(store, last30);
     const plan = estimatedIncomeTaxReserveGap(store, today);
     const ac = availableCash(store, today);
-    if (stx.currentPayable + plan.reserveTarget > ac.totalCash * 0.35) {
+    const obligations = stx.currentPayable + plan.reserveTarget;
+    // A ratio against cash is only meaningful when cash is actually known. With no bank
+    // feed connected, total cash is 0 — dividing by it yields Infinity, so state the
+    // obligation in dollars and say plainly that the cash side is missing.
+    if (ac.totalCash <= 0 && obligations > 0) {
+      out.push({
+        id: "tax-reserve-no-cash", kind: "risk", severity: "warning",
+        title: `${fmtUsd(obligations)} of tax obligations, with no cash data to cover them against`,
+        detail: `Sales tax collected plus the estimated income-tax reserve total ${fmtUsd(obligations)}. No bank or card account is connected, so Meridian cannot tell you whether that is covered. Connect a bank feed or enter balances manually to complete the picture.`,
+        evidence: [
+          { label: "Sales tax collected", value: fmtUsd(stx.currentPayable) },
+          { label: "Est. income tax reserve", value: fmtUsd(plan.reserveTarget) },
+          { label: "Cash accounts connected", value: "none" },
+        ],
+        confidencePct: 95, drill: "accounts",
+      });
+    } else if (ac.totalCash > 0 && obligations > ac.totalCash * 0.35) {
       out.push({
         id: "tax-reserve", kind: "risk", severity: "warning",
-        title: `Tax obligations are ${fmtPct((stx.currentPayable + plan.reserveTarget) / ac.totalCash, 0)} of total cash`,
+        title: `Tax obligations are ${fmtPct(obligations / ac.totalCash, 0)} of total cash`,
         detail: `Sales tax payable plus the estimated income-tax reserve consume a large share of cash on hand. Available operating cash is materially lower than the bank balance suggests.`,
         evidence: [
           { label: "Sales tax payable", value: fmtUsd(stx.currentPayable) },

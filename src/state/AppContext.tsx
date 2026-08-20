@@ -2,7 +2,7 @@
 // command palette, drilldown drawer, keyboard shortcuts.
 
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
-import { getStore, type Store } from "@/data/store";
+import { getStore, getDataSourceId, setDataSourceId, type DataSourceId, type Store } from "@/data/store";
 import { resolvePreset, type Period, type RangePreset } from "@/lib/dates";
 
 export type CompareMode = "previous" | "year";
@@ -15,6 +15,8 @@ export interface DrillContent {
 
 interface AppState {
   store: Store;
+  dataSource: DataSourceId;
+  setDataSource: (id: DataSourceId) => void;
   route: string;
   navigate: (r: string) => void;
   preset: RangePreset;
@@ -49,9 +51,14 @@ const LS = {
 };
 
 export function AppProvider({ children }: { children: React.ReactNode }) {
-  const store = useMemo(() => getStore(), []);
+  const [dataSource, setDataSourceState] = useState<DataSourceId>(() => getDataSourceId());
+  const store = useMemo(() => getStore(dataSource), [dataSource]);
   const [route, setRoute] = useState<string>(LS.get("route", "command"));
-  const [preset, setPresetState] = useState<RangePreset>(LS.get("preset", "30d") as RangePreset);
+  // A 30-day default suits a business trading every day. A store with sparse recent
+  // months would open on an empty screen, so real datasets default to 12 months.
+  const [preset, setPresetState] = useState<RangePreset>(
+    () => (LS.get("preset", "") || (dataSource === "demo" ? "30d" : "12m")) as RangePreset,
+  );
   const [compareMode, setCompareModeState] = useState<CompareMode>(LS.get("compare", "previous") as CompareMode);
   const [theme, setThemeState] = useState<"dark" | "light">(LS.get("theme", "dark") as "dark" | "light");
   const [paletteOpen, setPaletteOpen] = useState(false);
@@ -63,6 +70,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setDrill(null);
   }, []);
   const setPreset = useCallback((p: RangePreset) => { setPresetState(p); LS.set("preset", p); }, []);
+  const setDataSource = useCallback((id: DataSourceId) => {
+    setDataSourceId(id);
+    setDataSourceState(id);
+    setDrill(null);
+    // Each dataset has its own natural window; don't carry one over to the other.
+    const next: RangePreset = id === "demo" ? "30d" : "12m";
+    setPresetState(next);
+    LS.set("preset", next);
+  }, []);
   const setCompareMode = useCallback((m: CompareMode) => { setCompareModeState(m); LS.set("compare", m); }, []);
   const setTheme = useCallback((t: "dark" | "light") => { setThemeState(t); LS.set("theme", t); }, []);
 
@@ -118,7 +134,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const period = useMemo(() => resolvePreset(preset, store.today), [preset, store.today]);
 
   const value: AppState = {
-    store, route, navigate, preset, setPreset, period,
+    store, dataSource, setDataSource,
+    route, navigate, preset, setPreset, period,
     compareMode, setCompareMode, theme, setTheme,
     paletteOpen, setPaletteOpen,
     drill, openDrill: setDrill, closeDrill: () => setDrill(null),

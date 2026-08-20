@@ -82,6 +82,37 @@ npm run typecheck
 npm run build    # production web bundle
 ```
 
+## Two datasets
+
+The top-bar selector switches between:
+
+- **WaterBorn Workshop** — your real Shopify history. 811 orders and $51,838 gross since
+  Aug 2023, reconciled to Shopify's own reported totals. This is the default.
+- **Demo dataset** — a fully-connected simulated brand, useful for seeing every feature
+  populated.
+
+### Absence of data is not zero
+
+Shopify reports what you sold. It does not report bank balances, product costs, web
+sessions or ad spend — so on the real dataset those are **unknown**, and Meridian says so
+rather than computing a confident number from nothing. Each dataset declares its
+`Capabilities`, and every metric downstream respects them:
+
+| Missing input | What Meridian refuses to state |
+|---|---|
+| Bank / card | Cash, available cash, runway, cash-flow forecast |
+| Product costs | Gross profit, margin, contribution, true product ranking |
+| Web analytics | Sessions, conversion rate, funnel |
+| Ad platforms | CAC, ROAS, MER |
+| Line quantities | Units sold, items per order |
+
+The business-health gauge scores only measurable components, renormalises, and reports
+its coverage — reading **PARTIAL**, not **HEALTH**, when the picture is incomplete.
+
+This exists because an earlier build, pointed at a store with no bank feed, cheerfully
+reported *"available cash −$13,096"* and *"contribution margin 100%"*. Both were
+arithmetic on nothing. Tests now pin every one of those cases.
+
 ## Architecture in one screen
 
 Strict one-way layering; the UI never computes money and the LLM is never the accounting
@@ -137,7 +168,7 @@ Highlights:
 
 ## Financial correctness is tested, not asserted
 
-`npm test` runs 39 tests covering ledger integrity, business plausibility, forecast
+`npm test` runs 60 tests covering ledger integrity, business plausibility, forecast
 behavior, scenario modelling, and every demo storyline:
 
 - trial balance is exactly 0; cash-flow statement ties opening + O + I + F = closing
@@ -149,6 +180,10 @@ behavior, scenario modelling, and every demo storyline:
 - the briefing never claims "performance is strong" while revenue is falling
 - no recommendation ever proposes a zero-quantity action
 - an inverted metric (ad spend, CAC, refunds) is never praised for moving the wrong way
+- on the real dataset: no NaN or Infinity anywhere, available cash is never a fabricated
+  deficit, the briefing never claims a margin without costs, the analyst declines the
+  cash question rather than answering it wrongly, order count is never passed off as a
+  unit count — and the complete demo dataset still answers all of them
 
 The Rust shell compiles clean and the SQLite migration applies (32 tables, 15 indexes);
 both were verified on Linux, where Tauri needs GTK/WebKit. The macOS `.app`/`.dmg`

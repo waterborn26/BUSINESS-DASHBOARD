@@ -14,6 +14,7 @@ import {
 export default function Sales() {
   const { store, period, compareMode } = useApp();
   const cmp = useMemo(() => compare(store, period), [store, period]);
+  const cap = store.capabilities;
   const c = cmp.current;
   const base = compareMode === "year" ? cmp.yearAgo : cmp.previous;
 
@@ -40,9 +41,13 @@ export default function Sales() {
         <Kpi label="Net sales" value={fmtUsdCompact(c.netRevenue)} current={c.netRevenue} base={base.netRevenue} />
         <Kpi label="Taxes collected" value={fmtUsdCompact(c.taxCollected)} provenance="imported" />
         <Kpi label="Orders" value={fmtNum(c.orders)} current={c.orders} base={base.orders} />
-        <Kpi label="Units sold" value={fmtNum(c.units)} current={c.units} base={base.units} />
+        {cap.units
+          ? <Kpi label="Units sold" value={fmtNum(c.units)} current={c.units} base={base.units} />
+          : <Kpi label="Units sold" value="—" sub={<span className="badge warning">needs line quantities</span>} />}
         <Kpi label="AOV" value={fmtUsd(c.aov)} current={c.aov} base={base.aov} />
-        <Kpi label="Items / order" value={c.itemsPerOrder.toFixed(2)} current={c.itemsPerOrder} base={base.itemsPerOrder} />
+        {cap.units
+          ? <Kpi label="Items / order" value={c.itemsPerOrder.toFixed(2)} current={c.itemsPerOrder} base={base.itemsPerOrder} />
+          : <Kpi label="Items / order" value="—" sub={<span className="badge warning">needs line quantities</span>} />}
       </div>
 
       <Card
@@ -77,7 +82,7 @@ export default function Sales() {
                     <td style={{ textTransform: "capitalize" }}>{s.source}</td>
                     <td className="num">{fmtNum(s.orders)}</td>
                     <td className="num">{fmtUsdCompact(s.revenue)}</td>
-                    <td className="num">{fmtPct(s.conversion, 2)}</td>
+                    <td className="num">{cap.sessions ? fmtPct(s.conversion, 2) : <span className="dim">—</span>}</td>
                     <td className="num dim">{c.netRevenue ? fmtPct(s.revenue / c.netRevenue, 0) : "—"}</td>
                   </tr>
                 ))}

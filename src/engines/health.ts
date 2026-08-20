@@ -12,6 +12,7 @@ import { customerKpis } from "./customers";
 import { inventoryRows, inventoryCapital } from "./inventory";
 import { salesTaxSummary, estimatedIncomeTaxReserveGap } from "./taxes";
 import { pnl } from "./pnl";
+import { CAPABILITY_LABELS } from "@/domain/types";
 
 export interface HealthComponent {
   id: string;
@@ -25,17 +26,22 @@ export interface HealthComponent {
 export interface HealthScore {
   total: number;
   components: HealthComponent[];
+  /** Components skipped because the data behind them is not connected. */
+  unavailable: { label: string; needs: string }[];
+  /** Share of the full weighting the score is actually based on (1 = complete). */
+  coverage: number;
 }
 
 export function healthScore(store: Store): HealthScore {
   const today = store.today;
+  const cap = store.capabilities;
   const last30: Period = { start: addDays(today, -29), end: today };
   const cmp = compare(store, last30);
   const cash = availableCash(store, today);
   const fc = cashForecast(store, 90);
   const cust = customerKpis(store, last30);
   const inv = inventoryRows(store);
-  const cap = inventoryCapital(inv);
+  const invCapital = inventoryCapital(inv);
   const statement = pnl(store, last30);
   const stx = salesTaxSummary(store, last30);
   const itx = estimatedIncomeTaxReserveGap(store, today);
@@ -54,7 +60,7 @@ export function healthScore(store: Store): HealthScore {
     });
   }
   // Profitability: operating margin, 0 at 0%, 100 at 20%
-  {
+  if (cap.cogs && cap.expenses) {
     const m = statement.operatingMarginPct;
     comps.push({
       id: "profit", label: "Profitability", weight: 0.18,
@@ -64,7 +70,7 @@ export function healthScore(store: Store): HealthScore {
     });
   }
   // Cash position: available cash vs 2 months of opex
-  {
+  if (cap.cash && cap.expenses) {
     const monthlyOpex = statement.opexTotal;
     const ratio = monthlyOpex > 0 ? cash.availableCash / (monthlyOpex * 2) : 1;
     comps.push({
@@ -75,7 +81,7 @@ export function healthScore(store: Store): HealthScore {
     });
   }
   // Cash-flow outlook: penalize projected floor breaches
-  {
+  if (cap.cash) {
     const min = Math.min(...fc.points.map((pt) => pt.available));
     const score = min < 0 ? 5 : min < 2_500_000 ? 45 : min < 4_000_000 ? 75 : 95;
     comps.push({
@@ -86,7 +92,7 @@ export function healthScore(store: Store): HealthScore {
     });
   }
   // Tax health: reserves vs obligations
-  {
+  if (cap.cash) {
     const obligations = stx.currentPayable + itx.reserveTarget;
     const ratio = obligations > 0 ? clamp(cash.totalCash / (obligations * 3), 0, 1) : 1;
     comps.push({
@@ -97,7 +103,7 @@ export function healthScore(store: Store): HealthScore {
     });
   }
   // Retention
-  {
+  if (cap.customers) {
     const r = cust.repeatRatePct;
     comps.push({
       id: "retention", label: "Customer retention", weight: 0.08,
@@ -107,7 +113,7 @@ export function healthScore(store: Store): HealthScore {
     });
   }
   // Acquisition efficiency: LTV:CAC
-  {
+  if (cap.adSpend && cap.customers) {
     const l = cust.ltvToCac;
     comps.push({
       id: "cac", label: "Acquisition efficiency", weight: 0.08,
@@ -117,8 +123,9 @@ export function healthScore(store: Store): HealthScore {
     });
   }
   // Inventory health
-  {
-    const stranded = cap.atCost > 0 ? (cap.slowMovingCapital + cap.deadStockCapital) / cap.atCost : 0;
+  if (cap.inventory) {
+    const stranded = invCapital.atCost > 0
+      ? (invCapital.slowMovingCapital + invCapital.deadStockCapital) / invCapital.atCost : 0;
     const risky = inv.filter((r) => r.health === "Stockout risk").length;
     const score = clamp(100 - stranded * 180 - risky * 12, 0, 100);
     comps.push({
@@ -129,7 +136,7 @@ export function healthScore(store: Store): HealthScore {
     });
   }
   // Conversion
-  {
+  if (cap.sessions) {
     const c = cmp.current.conversion;
     const prev = cmp.previous.conversion;
     comps.push({
@@ -140,6 +147,25 @@ export function healthScore(store: Store): HealthScore {
     });
   }
 
-  const total = Math.round(comps.reduce((t, c) => t + c.score * c.weight, 0));
-  return { total, components: comps };
+  // Score only what is measurable, and renormalise so a partially-connected business
+  // is not silently penalised for data it has not supplied. Coverage is reported so the
+  // number can never masquerade as a complete assessment.
+  const weightPresent = comps.reduce((t, c) => t + c.weight, 0);
+  const total = weightPresent > 0
+    ? Math.round(comps.reduce((t, c) => t + c.score * c.weight, 0) / weightPresent)
+    : 0;
+
+  const unavailable: { label: string; needs: string }[] = [];
+  const miss = (on: boolean, label: string, key: keyof typeof CAPABILITY_LABELS) => {
+    if (!on) unavailable.push({ label, needs: CAPABILITY_LABELS[key].needs });
+  };
+  miss(cap.cogs && cap.expenses, "Profitability", "cogs");
+  miss(cap.cash && cap.expenses, "Available cash", "cash");
+  miss(cap.cash, "90-day cash outlook", "cash");
+  miss(cap.customers, "Customer retention", "customers");
+  miss(cap.adSpend && cap.customers, "Acquisition efficiency", "adSpend");
+  miss(cap.inventory, "Inventory health", "inventory");
+  miss(cap.sessions, "Website conversion", "sessions");
+
+  return { total, components: comps, unavailable, coverage: weightPresent };
 }
