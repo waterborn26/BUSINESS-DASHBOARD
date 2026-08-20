@@ -15,6 +15,7 @@ import { recommendations } from "@/engines/recommend";
 import { healthScore } from "@/engines/health";
 import { dailyBriefing } from "@/engines/briefing";
 import { runScenario, DEFAULT_LEVERS } from "@/engines/scenario";
+import { CASH_FLOOR } from "@/domain/policy";
 import { settlementReconciliation } from "@/engines/reconcile";
 import { addDays } from "@/lib/dates";
 
@@ -79,6 +80,20 @@ describe("cash engine", () => {
     const first = fc.points[0];
     const last = fc.points[fc.points.length - 1];
     expect(last.cash - last.available).toBeLessThanOrEqual((first.cash - first.available) * 1.6);
+  });
+
+  it("reports the trough, and warns only when it breaches the shared floor", () => {
+    // One floor, read the same way everywhere: a warning that fires on a dip which
+    // recovers would contradict the 30/60/90 figures shown beside it.
+    const fc = cashForecast(store, 90);
+    const min = Math.min(...fc.points.map((p) => p.available));
+    expect(fc.trough.available).toBe(min);
+    expect(fc.points.some((p) => p.date === fc.trough.date)).toBe(true);
+    if (min < CASH_FLOOR) {
+      expect(fc.warnings.length).toBe(1);
+    } else {
+      expect(fc.warnings).toEqual([]);
+    }
   });
 
   it("forecast uncertainty band widens sub-linearly (sqrt, not summed)", () => {

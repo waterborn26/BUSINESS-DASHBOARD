@@ -7,6 +7,7 @@ import { Sparkline } from "@/components/charts/Sparkline";
 import { addDays, type Period } from "@/lib/dates";
 import { fmtNum, fmtPct, fmtUsd, fmtUsdCompact } from "@/lib/money";
 import { periodTotals, productStats, series, type MetricId } from "@/engines/analytics";
+import { trendState } from "@/lib/trendState";
 
 interface TrendRow {
   label: string;
@@ -71,14 +72,6 @@ export default function Trends() {
   const rising = [...products].filter((p) => p.units > 20).sort((a, b) => b.trendPct - a.trendPct).slice(0, 5);
   const falling = [...products].filter((p) => p.units > 10).sort((a, b) => a.trendPct - b.trendPct).slice(0, 5);
 
-  const state = (g1: number, accel: number, invert?: boolean) => {
-    const good = invert ? g1 < 0 : g1 > 0;
-    if (Math.abs(g1) < 0.03) return { label: "stable", cls: "" };
-    if (good && accel > 0.03) return { label: "accelerating", cls: "good" };
-    if (good) return { label: "growing", cls: "good" };
-    if (!good && accel < -0.03) return { label: "deteriorating", cls: "critical" };
-    return { label: invert ? "rising (watch)" : "slowing", cls: "warning" };
-  };
 
   return (
     <>
@@ -88,7 +81,7 @@ export default function Trends() {
             <thead><tr><th>Metric</th><th>12 weeks</th><th className="num">Current 28d</th><th className="num">Prior 28d</th><th className="num">Change</th><th className="num">Acceleration</th><th>State</th></tr></thead>
             <tbody>
               {rows.map((r) => {
-                const s = state(r.g1, r.accel, r.invert);
+                const s = trendState(r.g1, r.accel, r.invert);
                 return (
                   <tr key={r.metric}>
                     <td style={{ fontWeight: 600 }}>{r.label}</td>

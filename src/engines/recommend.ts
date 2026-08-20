@@ -29,6 +29,9 @@ export interface Recommendation {
   drill?: string;
 }
 
+/** Channels the business pays for by the click — throttling these is a real lever. */
+const PAID_SOURCES = ["meta", "google", "tiktok"];
+
 // Session-lifetime status store (persisted to SQLite in the Tauri build).
 const statusMap = new Map<string, RecStatus>();
 export function recStatus(id: string): RecStatus { return statusMap.get(id) ?? "open"; }
@@ -116,7 +119,10 @@ export function recommendations(store: Store): Recommendation[] {
     out.push({
       id: "fix-mobile-pdp",
       title: "Investigate mobile product-page performance",
-      action: `Review the ${fmtDate(store.siteUpdateDay)} product-page changes, A/B test against the prior template, and reduce paid Instagram traffic until mobile conversion recovers.`,
+      action: `Review the ${fmtDate(store.siteUpdateDay)} product-page changes and A/B test against the prior template. ` +
+        (PAID_SOURCES.includes(mob.attribution ?? "")
+          ? `The loss is concentrated in paid ${mob.attribution} traffic — throttle that spend until mobile conversion recovers.`
+          : `The loss spans ${mob.attribution ?? "mobile"} traffic rather than one paid channel, so fix the page before touching budgets.`),
       reason: mob.detail,
       evidence: mob.evidence,
       impactMonthly: Math.abs(mob.estMonthlyImpact ?? 400_000),

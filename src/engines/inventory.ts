@@ -5,6 +5,7 @@ import type { Store } from "@/data/store";
 import { addDays } from "@/lib/dates";
 import { productStats, type ProductStats } from "./analytics";
 import { availableCash } from "./cash";
+import { CASH_FLOOR, LEAD_TIME_DAYS, REORDER_COVER_DAYS } from "@/domain/policy";
 
 export type InventoryHealth = "Healthy" | "Overstocked" | "Understocked" | "Slow moving" | "Dead stock" | "Stockout risk";
 
@@ -18,14 +19,7 @@ export interface InventoryRow extends ProductStats {
   landedUnitCost: number;
 }
 
-/** Default supplier lead time, in days. Per-vendor overrides come with the PO connector. */
-export const LEAD_TIME_DAYS = 35;
-
-/** Days of cover a reorder targets after the goods land. */
-export const REORDER_COVER_DAYS = 55;
-
-/** Available cash kept untouched by the cash-aware reorder planner. */
-export const CASH_FLOOR = 2_000_000;
+export { LEAD_TIME_DAYS, REORDER_COVER_DAYS, CASH_FLOOR } from "@/domain/policy";
 
 export function inventoryRows(store: Store): InventoryRow[] {
   const stats = productStats(store, { start: addDays(store.today, -89), end: store.today });

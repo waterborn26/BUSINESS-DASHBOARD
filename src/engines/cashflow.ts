@@ -5,10 +5,12 @@
 import type { Store } from "@/data/store";
 import { accountBalance } from "./ledger";
 import { addDays, dateRange, type Period } from "@/lib/dates";
+import { fmtUsdCompact } from "@/lib/money";
 import { forecastDaily } from "./forecast";
 import { availableCash } from "./cash";
 import { estimatedIncomeTaxReserveGap } from "./taxes";
 import { MONTHLY_OBLIGATIONS, DAY2_OBLIGATIONS } from "@/data/demo";
+import { CASH_FLOOR } from "@/domain/policy";
 
 const CASH_IDS = ["cash_checking", "cash_savings", "cash_paypal"];
 
@@ -86,6 +88,8 @@ export interface CashForecast {
   inventoryPurchases30: number;
   taxPayments30: number;
   endingCash30: number;
+  /** Lowest projected available cash over the horizon, and when it occurs. */
+  trough: { date: string; available: number };
   warnings: string[];
 }
 
@@ -94,7 +98,7 @@ export interface CashForecast {
  * outflows follow the known schedule: recurring expenses, ad spend trend, PO balances,
  * bills, sales-tax remittances, CC payments, loan, owner draws.
  */
-export function cashForecast(store: Store, horizonDays: number, threshold = 2_500_000): CashForecast {
+export function cashForecast(store: Store, horizonDays: number, threshold = CASH_FLOOR): CashForecast {
   const today = store.today;
   // Daily net cash-in from sales ≈ forecast net revenue × (1 − fee rate), lagged 2 days.
   const hist = dateRange(addDays(today, -119), today).map((d) => {
@@ -198,14 +202,23 @@ export function cashForecast(store: Store, horizonDays: number, threshold = 2_50
     if (i < 30) { in30 += inflow; end30 = cash; }
     const available = cash - deductionStack;
     points.push({ date, cash, available, lo: cash - cumBand, hi: cash + cumBand });
-    if (available < threshold && warnings.length === 0) {
-      warnings.push(`Projected available cash falls below your $${Math.round(threshold / 100).toLocaleString()} floor around ${date}.`);
-    }
+  }
+
+  // Report the actual low point, not the first crossing. A first-crossing warning on a
+  // dip that recovers contradicts the 30/60/90 figures shown beside it.
+  let trough = points[0];
+  for (const pt of points) if (pt.available < trough.available) trough = pt;
+  if (trough.available < threshold) {
+    warnings.push(
+      `Projected available cash bottoms at ${fmtUsdCompact(trough.available)} around ${trough.date}, ` +
+      `below your ${fmtUsdCompact(threshold)} floor.`,
+    );
   }
   return {
     points, horizonDays,
     expectedInflows30: in30, expectedExpenses30: out30,
     inventoryPurchases30: inv30, taxPayments30: tax30, endingCash30: end30,
+    trough: { date: trough.date, available: trough.available },
     warnings,
   };
 }

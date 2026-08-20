@@ -6,6 +6,7 @@ import { useApp } from "@/state/AppContext";
 import { Card, StmtRow, Kpi } from "@/components/ui";
 import { LineChart } from "@/components/charts/LineChart";
 import { fmtUsd, fmtUsdCompact } from "@/lib/money";
+import { fmtDate } from "@/lib/dates";
 import { cashflowStatement, cashForecast } from "@/engines/cashflow";
 import { pnl } from "@/engines/pnl";
 
@@ -91,9 +92,16 @@ export default function CashFlow() {
               schedule of subscriptions, contractors, rent, loan and card payments, PO balances, bills, and
               tax remittance dates. Band = 80% forecast uncertainty. All values are estimates.
             </p>
-            {fc.warnings.map((w) => (
-              <div key={w} className="insight warning" style={{ marginTop: 8 }}><div className="insight-detail">{w}</div></div>
-            ))}
+            {fc.warnings.length > 0 ? (
+              fc.warnings.map((w) => (
+                <div key={w} className="insight warning" style={{ marginTop: 8 }}><div className="insight-detail">{w}</div></div>
+              ))
+            ) : (
+              <p className="muted" style={{ fontSize: 11.5, marginTop: 8 }}>
+                Tightest projected moment: <strong>{fmtUsdCompact(fc.trough.available)}</strong> of available cash
+                around {fmtDate(fc.trough.date)} — above the operating floor.
+              </p>
+            )}
           </Card>
         </div>
       </div>

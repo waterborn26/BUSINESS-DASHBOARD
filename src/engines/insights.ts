@@ -25,6 +25,8 @@ export interface Insight {
   confidencePct: number;
   metric?: string;
   drill?: string;            // route id
+  /** Traffic source the finding is concentrated in, when one is identified. */
+  attribution?: string;
 }
 
 export function detectInsights(store: Store): Insight[] {
@@ -42,15 +44,29 @@ export function detectInsights(store: Store): Insight[] {
     const prevCr = prev[0].value ? prev[4].value / prev[0].value : 0;
     if (prevCr > 0 && (curCr - prevCr) / prevCr < -0.1) {
       const drop = (curCr - prevCr) / prevCr;
-      // worst source
-      const srcNow = trafficSourceStats(store, last14);
-      const srcPrev = trafficSourceStats(store, prior14);
-      let worst = "", worstDrop = 0;
-      for (const s of srcNow) {
-        const p = srcPrev.find((x) => x.source === s.source);
-        if (p && p.conversion > 0) {
-          const d = (s.conversion - p.conversion) / p.conversion;
-          if (d < worstDrop) { worstDrop = d; worst = s.source; }
+      // Attribute the decline to a source, measured the same way the claim is: mobile
+      // only. Two guards keep the attribution honest — a source must carry enough
+      // mobile traffic for its rate to mean anything (a channel with a handful of
+      // sessions swings wildly on noise), and sources are ranked by orders actually
+      // lost rather than by percentage, which is the damage that matters.
+      const sources = [...new Set(store.trafficDaily.map((t) => t.source))];
+      const mobileCr = (p: Period, source: string) => {
+        const f = funnel(store, p, { device: "mobile", source });
+        return { sessions: f[0].value, cr: f[0].value ? f[4].value / f[0].value : 0 };
+      };
+      const totalMobile = cur[0].value;
+      const MIN_SHARE = 0.08; // a source must be ≥8% of mobile traffic to be blamed
+      let worst = "", worstDrop = 0, worstLostOrders = 0;
+      for (const src of sources) {
+        const now = mobileCr(last14, src);
+        const before = mobileCr(prior14, src);
+        if (before.cr <= 0 || now.sessions < totalMobile * MIN_SHARE) continue;
+        const d = (now.cr - before.cr) / before.cr;
+        const lostOrders = (before.cr - now.cr) * now.sessions;
+        if (d < 0 && lostOrders > worstLostOrders) {
+          worstLostOrders = lostOrders;
+          worstDrop = d;
+          worst = src;
         }
       }
       const t = periodTotals(store, last14);
@@ -60,11 +76,11 @@ export function detectInsights(store: Store): Insight[] {
         kind: "problem", severity: "critical",
         title: `Mobile conversion down ${fmtPct(Math.abs(drop), 0)} since the ${fmtDate(store.siteUpdateDay)} site update`,
         detail: `Mobile conversion fell from ${fmtPct(prevCr, 2)} to ${fmtPct(curCr, 2)} over the last 14 days while sessions held. ` +
-          `The decline is worst on ${worst === "meta" ? "Instagram/Meta" : worst} traffic. Mobile add-to-cart rate also dropped after the ${fmtDate(store.siteUpdateDay)} product-page update.`,
+          `${worst ? `The decline is concentrated in ${worst === "meta" ? "Instagram/Meta" : worst} traffic, which lost roughly ${Math.round(worstLostOrders)} orders over the window. ` : ""}Mobile add-to-cart rate also dropped after the ${fmtDate(store.siteUpdateDay)} product-page update.`,
         evidence: [
           { label: "Mobile CR (last 14d)", value: fmtPct(curCr, 2) },
           { label: "Mobile CR (prior 14d)", value: fmtPct(prevCr, 2) },
-          { label: "Worst source", value: `${worst} (${fmtPct(worstDrop, 0)})` },
+          ...(worst ? [{ label: "Worst source (by orders lost)", value: `${worst} (${fmtPct(worstDrop, 0)})` }] : []),
           { label: "Site update", value: fmtDate(store.siteUpdateDay) },
           { label: "Est. lost revenue", value: `${fmtUsdCompact(lostMonthly)}/month` },
         ],
@@ -72,6 +88,7 @@ export function detectInsights(store: Store): Insight[] {
         confidencePct: 87,
         metric: "conversion",
         drill: "website",
+        attribution: worst || undefined,
       });
     }
   }

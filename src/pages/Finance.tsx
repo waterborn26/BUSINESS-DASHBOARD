@@ -103,9 +103,16 @@ export default function Finance() {
             <StmtRow label="Tax payments (30d)" amount={fc.taxPayments30} neg />
             <StmtRow label="Projected ending cash (30d)" amount={fc.endingCash30} total badge="estimate" />
           </div>
-          {fc.warnings.map((w) => (
-            <div key={w} className="insight warning" style={{ marginTop: 8 }}><div className="insight-detail">{w}</div></div>
-          ))}
+          {fc.warnings.length > 0 ? (
+            fc.warnings.map((w) => (
+              <div key={w} className="insight warning" style={{ marginTop: 8 }}><div className="insight-detail">{w}</div></div>
+            ))
+          ) : (
+            <p className="muted" style={{ fontSize: 11.5, marginTop: 8 }}>
+              Tightest projected moment: <strong>{fmtUsdCompact(fc.trough.available)}</strong> of available cash
+              around {fmtDate(fc.trough.date)} — above the operating floor.
+            </p>
+          )}
         </Card>
       </div>
 

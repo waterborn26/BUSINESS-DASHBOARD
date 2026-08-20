@@ -3,6 +3,7 @@
 import React from "react";
 import { fmtPct, fmtUsd, pctChange } from "@/lib/money";
 import type { Provenance } from "@/domain/types";
+import { Sparkline } from "@/components/charts/Sparkline";
 
 export function Card({ title, right, children, className, pad0 }: {
   title?: React.ReactNode; right?: React.ReactNode; children: React.ReactNode; className?: string; pad0?: boolean;
@@ -104,4 +105,50 @@ export function EmptyNote({ children }: { children: React.ReactNode }) {
 export function Tone({ v, invert, children }: { v: number; invert?: boolean; children: React.ReactNode }) {
   const good = invert ? v < 0 : v > 0;
   return <span style={{ color: v === 0 ? undefined : good ? "var(--delta-good)" : "var(--delta-bad)" }}>{children}</span>;
+}
+
+/**
+ * Stat tile — the visual unit of the Command Center.
+ * Contract: label · value · delta (vs a named period) · trend sparkline.
+ * The value uses proportional figures; only columns of numbers get tabular-nums.
+ */
+export function StatTile({
+  label, value, spark, current, base, invert, baseLabel, note, onClick, provenance, accent, size = "md",
+}: {
+  label: string;
+  value: string;
+  spark?: number[];
+  current?: number;
+  base?: number;
+  invert?: boolean;
+  baseLabel?: string;
+  note?: React.ReactNode;
+  onClick?: () => void;
+  provenance?: Provenance;
+  accent?: string;
+  size?: "md" | "lg";
+}) {
+  return (
+    <div className={`stat ${onClick ? "clickable" : ""}`} onClick={onClick}>
+      <div className="stat-label">
+        <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>{label}</span>
+        {provenance && <ProvenanceBadge p={provenance} />}
+      </div>
+      <div className="stat-body">
+        <div className={`stat-value ${size === "lg" ? "lg" : ""}`}>{value}</div>
+        {spark && spark.length > 1 && (
+          <Sparkline values={spark} color={accent ?? "var(--s1)"} width={size === "lg" ? 104 : 88} height={size === "lg" ? 32 : 28} />
+        )}
+      </div>
+      <div className="stat-foot">
+        {current !== undefined && base !== undefined && (
+          <>
+            <Delta current={current} base={base} invert={invert} />
+            {baseLabel && <span className="muted">{baseLabel}</span>}
+          </>
+        )}
+        {note}
+      </div>
+    </div>
+  );
 }

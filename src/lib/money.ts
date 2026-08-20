@@ -15,9 +15,11 @@ export function fmtUsd(cents: number, opts?: { cents?: boolean; sign?: boolean }
 export function fmtUsdCompact(cents: number, sign = false): string {
   const s = cents < 0 ? "−" : sign && cents > 0 ? "+" : "";
   const abs = Math.abs(cents) / 100;
-  if (abs >= 1_000_000) return `${s}$${(abs / 1_000_000).toFixed(abs >= 10_000_000 ? 1 : 2)}M`;
-  if (abs >= 10_000) return `${s}$${(abs / 1000).toFixed(1)}k`;
-  if (abs >= 1_000) return `${s}$${(abs / 1000).toFixed(2)}k`;
+  // Drop a trailing ".0" — "$20k" reads cleaner than "$20.0k".
+  const trim = (x: string) => x.replace(/\.0+$/, "");
+  if (abs >= 1_000_000) return `${s}$${trim((abs / 1_000_000).toFixed(abs >= 10_000_000 ? 1 : 2))}M`;
+  if (abs >= 10_000) return `${s}$${trim((abs / 1000).toFixed(1))}k`;
+  if (abs >= 1_000) return `${s}$${trim((abs / 1000).toFixed(2))}k`;
   return `${s}$${Math.round(abs).toLocaleString("en-US")}`;
 }
 
