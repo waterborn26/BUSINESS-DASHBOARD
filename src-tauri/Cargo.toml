@@ -1,0 +1,27 @@
+[package]
+name = "meridian"
+version = "0.1.0"
+description = "Meridian — business intelligence and financial command center"
+authors = ["Waterborn Workshop"]
+edition = "2021"
+
+[lib]
+name = "meridian_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["macos-private-api"] }
+tauri-plugin-sql = { version = "2", features = ["sqlite"] }
+tauri-plugin-opener = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+keyring = "3"
+
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = "s"
+strip = true

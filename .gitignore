@@ -1,0 +1,13 @@
+node_modules/
+dist/
+*.local
+.DS_Store
+
+# Rust / Tauri build output
+src-tauri/target/
+src-tauri/gen/
+
+# Local databases — never commit business data
+*.db
+*.db-journal
+*.sqlite
