@@ -229,8 +229,11 @@ export function answerQuestion(store: Store, q: string): AnalystAnswer {
   if (/focus|this week|highest.impact|biggest opportunit/.test(s)) {
     const recs = recommendations(store).slice(0, 3);
     return {
-      answer: `Top priorities by expected impact × confidence × urgency ÷ difficulty: ${recs.map((r, i) => `${i + 1}. ${r.title} (est. ${fmtUsdCompact(r.impactMonthly)}/mo, ${r.confidencePct}% confidence)`).join("; ")}.`,
-      citations: recs.map((r) => ({ label: r.title, value: `${fmtUsdCompact(r.impactMonthly)}/mo` })),
+      answer: `Top priorities by expected impact × confidence × urgency ÷ difficulty: ${recs.map((r, i) => `${i + 1}. ${r.title} (${r.impactMonthly === null ? "impact not estimable at this revenue" : `est. ${fmtUsdCompact(r.impactMonthly)}/mo`}, ${r.confidencePct}% confidence)`).join("; ")}.`,
+      citations: recs.map((r) => ({
+        label: r.title,
+        value: r.impactMonthly === null ? "impact not estimable" : `${fmtUsdCompact(r.impactMonthly)}/mo`,
+      })),
       periodUsed: `As of ${fmtDate(today)}`,
     };
   }

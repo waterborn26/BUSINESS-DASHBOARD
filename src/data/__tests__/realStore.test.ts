@@ -197,3 +197,43 @@ describe("missing data is reported as unknown, never as a confident number", () 
     expect(demo.capabilities.units).toBe(true);
   });
 });
+
+describe("recommendation impact is bounded by what the business can produce", () => {
+  const monthlyRevenue = periodTotals(store, { start: addDays(today, -89), end: today }).netRevenue / 3;
+
+  it("never claims a monthly upside larger than the whole business earns in a month", () => {
+    for (const r of recommendations(store)) {
+      if (r.impactMonthly === null) continue;
+      expect(r.impactMonthly, `${r.id} claims ${r.impactMonthly} against ${monthlyRevenue}/mo`)
+        .toBeLessThanOrEqual(Math.round(monthlyRevenue));
+    }
+  });
+
+  it("withholds the estimate entirely at this revenue rather than inventing one", () => {
+    // The engine carries defaults sized for a mid-size brand ($1,800/mo win-back, and
+    // similar). On a store doing a few hundred dollars a month those are fiction.
+    expect(monthlyRevenue).toBeLessThan(100_000);
+    for (const r of recommendations(store)) expect(r.impactMonthly).toBeNull();
+  });
+
+  it("still ranks the actions, using confidence and urgency when impact is unknown", () => {
+    const recs = recommendations(store);
+    expect(recs.length).toBeGreaterThan(0);
+    for (const r of recs) {
+      expect(Number.isFinite(r.score), `${r.id} score = ${r.score}`).toBe(true);
+      expect(r.score).toBeGreaterThan(0);
+    }
+    for (let i = 1; i < recs.length; i++) expect(recs[i - 1].score).toBeGreaterThanOrEqual(recs[i].score);
+  });
+
+  it("keeps real dollar impacts on the fully-populated demo dataset", () => {
+    const demo = getStore("demo");
+    const demoMonthly = periodTotals(demo, { start: addDays(demo.today, -89), end: demo.today }).netRevenue / 3;
+    const recs = recommendations(demo);
+    expect(recs.some((r) => r.impactMonthly !== null && r.impactMonthly > 0)).toBe(true);
+    for (const r of recs) {
+      if (r.impactMonthly === null) continue;
+      expect(r.impactMonthly).toBeLessThanOrEqual(Math.round(demoMonthly));
+    }
+  });
+});

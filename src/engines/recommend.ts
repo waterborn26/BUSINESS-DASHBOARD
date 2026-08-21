@@ -8,7 +8,7 @@ import { fmtPct, fmtUsd, fmtUsdCompact } from "@/lib/money";
 import { detectInsights, type Evidence } from "./insights";
 import { inventoryRows, LEAD_TIME_DAYS, REORDER_COVER_DAYS } from "./inventory";
 import { availableCash } from "./cash";
-import { trafficSourceStats, productStats } from "./analytics";
+import { periodTotals, trafficSourceStats, productStats } from "./analytics";
 import { salesTaxSummary } from "./taxes";
 
 export type RecStatus = "open" | "done" | "ignored" | "remind" | "investigate";
@@ -19,7 +19,14 @@ export interface Recommendation {
   action: string;
   reason: string;
   evidence: Evidence[];
-  impactMonthly: number;    // cents (absolute expected value of acting)
+  /**
+   * Cents per month the action is expected to be worth — or `null` when the business
+   * is too small for the estimate to carry information. A store doing $170/month is
+   * not going to make $1,800/month from a win-back email; printing that figure beside
+   * a real one is a fabrication, so the estimate is withheld instead of scaled down
+   * into false precision.
+   */
+  impactMonthly: number | null;
   cashRequired: number;     // cents
   confidencePct: number;
   urgency: 1 | 2 | 3;       // 3 = act now
@@ -28,6 +35,9 @@ export interface Recommendation {
   category: "inventory" | "marketing" | "pricing" | "site" | "finance" | "expense" | "customers";
   drill?: string;
 }
+
+/** Below $1,000/month of revenue, a monthly-impact estimate is noise, not a number. */
+const IMPACT_FLOOR = 100_000;
 
 /** Channels the business pays for by the click — throttling these is a real lever. */
 const PAID_SOURCES = ["meta", "google", "tiktok"];
@@ -245,9 +255,24 @@ export function recommendations(store: Store): Recommendation[] {
     category: "customers", drill: "customers",
   });
 
-  // Score & sort
+  // Bound every estimate by what the business can actually produce. No single action
+  // is worth more per month than the whole business earns in a month, and below a
+  // floor the arithmetic stops meaning anything at all — several of the impacts here
+  // carry defaults sized for a mid-size brand, and unbounded they would print those
+  // defaults verbatim over a store doing a few hundred dollars a month.
+  const trailing90 = periodTotals(store, { start: addDays(today, -89), end: today });
+  const capacity = Math.max(0, trailing90.netRevenue / 3);
+  const estimable = capacity >= IMPACT_FLOOR;
   for (const r of out) {
-    const impact = Math.max(1, r.impactMonthly / 100);
+    r.impactMonthly = estimable && r.impactMonthly !== null
+      ? Math.min(r.impactMonthly, Math.round(capacity))
+      : null;
+  }
+
+  // Score & sort. With impacts withheld the ranking falls back to
+  // confidence × urgency ÷ difficulty, which is still a real ordering.
+  for (const r of out) {
+    const impact = Math.max(1, (r.impactMonthly ?? 0) / 100);
     r.score = (impact * (r.confidencePct / 100) * r.urgency) / r.difficulty;
   }
   return out.sort((a, b) => b.score - a.score);

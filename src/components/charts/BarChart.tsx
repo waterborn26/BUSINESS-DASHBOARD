@@ -15,9 +15,11 @@ interface Props {
   yFmt?: (v: number) => string;
   xFmt?: (l: string) => string;
   showLegend?: boolean;
+  /** Print the value above this one bar. Selective direct labels, never all of them. */
+  directLabelIndex?: number;
 }
 
-export function BarChart({ labels, series, stacked = true, height = 220, yFmt = (v) => v.toLocaleString(), xFmt, showLegend }: Props) {
+export function BarChart({ labels, series, stacked = true, height = 220, yFmt = (v) => v.toLocaleString(), xFmt, showLegend, directLabelIndex }: Props) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const [w, setW] = useState(640);
   const [hover, setHover] = useState<{ i: number; si: number } | null>(null);
@@ -113,6 +115,14 @@ export function BarChart({ labels, series, stacked = true, height = 220, yFmt = 
             </g>
           );
         })}
+        {directLabelIndex !== undefined && directLabelIndex >= 0 && directLabelIndex < n && (() => {
+          const total = series.reduce((t, s2) => t + Math.max(0, s2.values[directLabelIndex] ?? 0), 0);
+          if (total <= 0) return null;
+          return (
+            <text className="emph" x={M.left + slot * directLabelIndex + slot / 2}
+              y={Math.max(9, y(total) - 6)} textAnchor="middle">{yFmt(total)}</text>
+          );
+        })()}
       </svg>
       {hover && (
         <div className="chart-tip" style={{ left: Math.min(M.left + slot * hover.i + slot, w - 160), top: 6 }}>

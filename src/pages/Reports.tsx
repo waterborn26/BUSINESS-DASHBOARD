@@ -130,7 +130,7 @@ export default function Reports() {
           <div className="card-title">Recommended actions</div>
           <ol style={{ paddingLeft: 18, fontSize: 12.5, lineHeight: 1.8, color: "var(--ink-2)" }}>
             {recs.map((r) => (
-              <li key={r.id}><strong style={{ color: "var(--ink)" }}>{r.title}.</strong> {r.action} <span className="muted">(est. {fmtUsdCompact(r.impactMonthly)}/mo, {r.confidencePct}% confidence)</span></li>
+              <li key={r.id}><strong style={{ color: "var(--ink)" }}>{r.title}.</strong> {r.action} <span className="muted">({r.impactMonthly === null ? "impact not estimable" : `est. ${fmtUsdCompact(r.impactMonthly)}/mo`}, {r.confidencePct}% confidence)</span></li>
             ))}
           </ol>
         </div>

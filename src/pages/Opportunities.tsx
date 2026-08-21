@@ -85,7 +85,7 @@ export default function Opportunities() {
                 <div className="insight-title">
                   {i + 1}. {r.title}
                   <span className="badge" style={{ marginLeft: "auto" }}>{r.category}</span>
-                  <span className="badge">{fmtUsdCompact(r.impactMonthly)}/mo</span>
+                  <span className="badge">{r.impactMonthly === null ? "impact n/a" : `${fmtUsdCompact(r.impactMonthly)}/mo`}</span>
                   <span className="badge">{r.confidencePct}% conf.</span>
                   <span className="badge">urgency {r.urgency}/3</span>
                   <span className="badge">difficulty {r.difficulty}/3</span>

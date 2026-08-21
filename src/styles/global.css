@@ -430,3 +430,55 @@ a.link:hover { text-decoration: underline; }
 /* ── Impact bar on recommendations ───────────────────────── */
 .impact-track { background: var(--surface-3); border-radius: 3px; height: 5px; overflow: hidden; min-width: 54px; }
 .impact-fill { height: 100%; border-radius: 3px; background: var(--s1); }
+
+/* ── Command Center: visual-first layout ───────────────────── */
+
+.pulse { display: flex; gap: 22px; align-items: center; flex-wrap: wrap; }
+.pulse-gauge { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+
+.briefing { font-size: 14px; line-height: 1.55; color: var(--ink); }
+
+/* Two lines is the budget on the home screen; the rest is one click away. */
+.clamp-2 {
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2;
+  line-clamp: 2; overflow: hidden;
+}
+
+/* A control that reads as text, for rows that would drown in buttons. */
+.linkish {
+  background: none; border: 0; padding: 0; cursor: pointer;
+  font: inherit; font-size: 11px; font-weight: 600; color: var(--accent);
+}
+.linkish:hover { text-decoration: underline; }
+.linkish.on { color: var(--delta-good); }
+.linkish:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 3px; }
+
+.row-controls { display: flex; align-items: center; gap: 12px; margin-top: 6px; flex-wrap: wrap; }
+
+.insight.compact { padding: 9px 12px; }
+.insight.compact .insight-detail { margin-top: 2px; }
+
+/* Rank reads as position, not as decoration — these are ordered by score. */
+.rank {
+  flex-shrink: 0; width: 20px; height: 20px; border-radius: 5px; margin-top: 1px;
+  display: grid; place-items: center;
+  background: var(--surface-3); color: var(--ink-2);
+  font-size: 11px; font-weight: 700; font-variant-numeric: tabular-nums;
+}
+
+.cap-count { font-size: 12.5px; color: var(--ink-2); margin-bottom: 10px; }
+.cap-count strong { color: var(--ink); font-size: 15px; }
+.cap-strip { display: flex; flex-wrap: wrap; gap: 6px; }
+.cap {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 4px 9px; border-radius: 999px; font-size: 11.5px;
+  border: 1px solid var(--border); cursor: default;
+}
+.cap .dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+.cap.on { color: var(--ink-2); background: var(--surface-2); }
+.cap.on .dot { background: var(--good); }
+.cap.off { color: var(--ink-3); }
+.cap.off .dot { background: var(--baseline); }
+
+.chart text.emph { fill: var(--ink); font-size: 10.5px; font-weight: 600; }
+.card.fill { display: flex; flex-direction: column; }

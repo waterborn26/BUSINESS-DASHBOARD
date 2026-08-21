@@ -1,31 +1,33 @@
 // Command Center — the daily home screen.
 //
-// Reads visually first: a health gauge and briefing, one hero figure (available cash)
-// with a composition meter, then stat tiles that carry their own 30-day shape. The full
-// metric grid is retained below, grouped and collapsed, so nothing is lost — it just no
-// longer competes with the story for attention.
+// Six bands, each with one visual job: pulse (how am I doing), where I stand (money +
+// twelve-month shape), performance (four tiles carrying their own trend), what to do,
+// what changed, then everything else collapsed. Prose is kept to a briefing that clamps
+// to two lines; every other explanation lives behind a "Why?" rather than on the page,
+// so the screen is read at a glance and only expands where you ask it to.
 
 import React, { useMemo, useState } from "react";
 import { useApp } from "@/state/AppContext";
 import { Card, StatTile, StmtRow, Delta, ProvenanceBadge } from "@/components/ui";
 import { LineChart } from "@/components/charts/LineChart";
+import { BarChart } from "@/components/charts/BarChart";
 import { Sparkline } from "@/components/charts/Sparkline";
 import { Gauge, ScoreBars } from "@/components/charts/Gauge";
 import { SplitMeter, type MeterSegment } from "@/components/charts/SplitMeter";
 import { addDays, fmtDate, type Period } from "@/lib/dates";
 import { fmtNum, fmtPct, fmtRatio, fmtUsd, fmtUsdCompact } from "@/lib/money";
 import { movingAverage } from "@/lib/stats";
-import { compare, periodTotals, series, type MetricId } from "@/engines/analytics";
+import { bucketSeries, compare, periodTotals, series, type MetricId } from "@/engines/analytics";
 import { availableCash } from "@/engines/cash";
 import { cashForecast } from "@/engines/cashflow";
 import { dailyBriefing } from "@/engines/briefing";
-import { forecastDaily } from "@/engines/forecast";
 import { healthScore } from "@/engines/health";
 import { inventoryRows, inventoryCapital, CASH_FLOOR } from "@/engines/inventory";
 import { salesTaxSummary } from "@/engines/taxes";
 import { pnl } from "@/engines/pnl";
 import { recStatus, setRecStatus, type RecStatus, type Recommendation } from "@/engines/recommend";
 import type { Insight } from "@/engines/insights";
+import { CAPABILITY_LABELS, type Capabilities } from "@/domain/types";
 
 export default function CommandCenter() {
   const app = useApp();
@@ -48,6 +50,9 @@ export default function CommandCenter() {
 
   const [recTick, setRecTick] = useState(0);
   const [showAll, setShowAll] = useState(false);
+  const [briefOpen, setBriefOpen] = useState(false);
+  const [showAllActions, setShowAllActions] = useState(false);
+  const [monthSpan, setMonthSpan] = useState<12 | 24 | "all">(12);
 
   // 30-day shape for every stat tile, computed once.
   // Daily values carry heavy weekday seasonality, which reads as noise at 90px wide —
@@ -73,16 +78,34 @@ export default function CommandCenter() {
     } as Record<string, number[]>;
   }, [store]);
 
-  const revChart = useMemo(() => {
-    const hist = series(store, "net_revenue", { start: addDays(today, -59), end: today });
-    const f = forecastDaily(hist.map((p) => p.value), 14);
+  // Twelve COMPLETE months. The current month is excluded on purpose — a part-month bar
+  // drawn beside full ones reads as a collapse in demand that has not happened.
+  const monthly = useMemo(() => {
+    const [cy, cm] = today.slice(0, 7).split("-").map(Number);
+    const span = monthSpan === "all" ? 600 : monthSpan;
+    const startIdx = cy * 12 + (cm - 1) - span;
+    const wanted = `${Math.floor(startIdx / 12)}-${String((startIdx % 12) + 1).padStart(2, "0")}-01`;
+    const start = wanted < store.start ? store.start : wanted;
+    const end = addDays(`${cy}-${String(cm).padStart(2, "0")}-01`, -1);
+    const all = bucketSeries(series(store, "net_revenue", { start, end }), "month");
+    // "All" starts at the first month that actually sold something — leading empty
+    // months are pre-history, not a slump.
+    const firstSale = all.findIndex((b) => b.value > 0);
+    const buckets = (monthSpan === "all" && firstSale > 0 ? all.slice(firstSale) : all).slice(-span);
+    const values = buckets.map((b) => b.value);
+    const best = buckets.reduce((a, b) => (b.value > a.value ? b : a), buckets[0] ?? { date: "", value: 0 });
+    const sum = values.reduce((t, v) => t + v, 0);
+    const last3 = values.slice(-3).reduce((t, v) => t + v, 0);
+    const prior3 = values.slice(-6, -3).reduce((t, v) => t + v, 0);
     return {
-      labels: [...hist.map((p) => p.date), ...Array.from({ length: 14 }, (_, i) => addDays(today, i + 1))],
-      actual: [...hist.map((p) => p.value), ...Array(14).fill(null)],
-      forecast: [...Array(hist.length - 1).fill(null), hist[hist.length - 1].value, ...f.mean],
-      band: { lo: f.lo, hi: f.hi, startIndex: hist.length },
+      keys: buckets.map((b) => b.date),
+      values,
+      best,
+      avg: values.length ? sum / values.length : 0,
+      momentum: prior3 > 0 ? (last3 - prior3) / prior3 : null,
+      rangeLabel: buckets.length ? `${monthLabel(buckets[0].date)} – ${monthLabel(buckets[buckets.length - 1].date)}` : "",
     };
-  }, [store]);
+  }, [store, monthSpan]);
 
   const c = cmp.current;
   const p = cmp.previous;
@@ -97,7 +120,11 @@ export default function CommandCenter() {
   const risks = [...briefing.problems, ...briefing.risks];
   const stockoutCount = useMemo(
     () => inventoryRows(store).filter((r) => r.health === "Stockout risk").length, [store]);
-  const maxImpact = Math.max(...briefing.actions.map((r) => r.impactMonthly), 1);
+  // The bar encodes the priority SCORE, not the dollar impact. Encoding impact put the
+  // longest bar next to rank 4 — the eye read the list as mis-sorted, because urgency and
+  // difficulty move the ranking and were invisible. The bar now shows the thing the order
+  // is actually based on, so it descends, and the dollar figure sits beside it as text.
+  const maxScore = Math.max(...briefing.actions.map((r) => r.score), 0.0001);
   const markStatus = (id: string, s: RecStatus) => { setRecStatus(id, s); setRecTick((t) => t + 1); };
 
   const projections = useMemo(() => ([30, 60, 90] as const).map((d) => ({
@@ -107,22 +134,27 @@ export default function CommandCenter() {
 
   return (
     <>
-      {/* ── Briefing + health ───────────────────────────── */}
+      {/* ── Pulse: one gauge, one sentence, the counts ─── */}
       <Card>
-        <div style={{ display: "flex", gap: 22, alignItems: "center", flexWrap: "wrap" }}>
-          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2 }}>
-            <Gauge value={health.total} size={128} label={health.coverage >= 0.99 ? "HEALTH" : "PARTIAL"} />
+        <div className="pulse">
+          <div className="pulse-gauge">
+            <Gauge value={health.total} size={104} label={health.coverage >= 0.99 ? "HEALTH" : "PARTIAL"} />
             <button className="btn" style={{ fontSize: 11, padding: "2px 8px" }} onClick={openHealthDrill}>
               Why?
             </button>
           </div>
-          <div style={{ flex: 1, minWidth: 340 }}>
-            <div className="band-title" style={{ marginBottom: 8 }}>
+          <div style={{ flex: 1, minWidth: 300 }}>
+            <div className="band-title" style={{ marginBottom: 6 }}>
               Daily briefing · {fmtDate(today)}
-              <span className="badge">deterministic AI — demo mode</span>
+              <span className="badge">deterministic AI</span>
             </div>
-            <p className="selectable" style={{ fontSize: 14, lineHeight: 1.6 }}>{briefing.headline}</p>
-            <div className="chip-row" style={{ marginTop: 12 }}>
+            <p className={`selectable briefing ${briefOpen ? "" : "clamp-2"}`}>{briefing.headline}</p>
+            {briefing.headline.length > 150 && (
+              <button className="linkish" onClick={() => setBriefOpen((v) => !v)}>
+                {briefOpen ? "Show less" : "Read the full briefing"}
+              </button>
+            )}
+            <div className="chip-row" style={{ marginTop: 10 }}>
               {([
                 { n: risks.length, label: "need attention", color: "var(--critical)", route: "alerts" },
                 { n: briefing.opportunities.length, label: "opportunities", color: "var(--s1)", route: "opportunities" },
@@ -141,120 +173,98 @@ export default function CommandCenter() {
         </div>
       </Card>
 
-      {/* ── Hero: where I stand ─────────────────────────── */}
+      {/* ── Where I stand: the money, and the shape of the year ── */}
       <div className="band-title">Where I stand</div>
-      <div className="grid" style={{ gridTemplateColumns: "minmax(0, 1.35fr) minmax(0, 1fr)" }}>
-        <Card>
-          <div style={{ display: "flex", alignItems: "flex-start", gap: 18, flexWrap: "wrap" }}>
-            <div>
-              {cash.cashKnown ? (
-                <>
-                  <div className="stat-label">Available to spend right now</div>
-                  <div className="hero-figure">{fmtUsd(cash.availableCash)}</div>
-                  <div className="hero-sub">
-                    of {fmtUsd(cash.totalCash)} total cash ·{" "}
-                    <a className="link" onClick={openAvailableCashDrill}>why? →</a>
-                  </div>
-                </>
-              ) : (
-                <>
-                  {/* No bank feed: subtracting real obligations from unknown cash would
-                      print a confident deficit that is not true. State what is known. */}
-                  <div className="stat-label">Committed and already owed</div>
-                  <div className="hero-figure">{fmtUsd(cash.obligationsTotal)}</div>
-                  <div className="hero-sub">
-                    Cash on hand is <strong>not connected</strong>, so available cash cannot be
-                    calculated ·{" "}
-                    <a className="link" onClick={() => app.navigate("datasources")}>connect an account →</a>
-                  </div>
-                </>
-              )}
-            </div>
-            {cash.cashKnown && cash.inTransit.amount !== 0 && (
-              <div style={{ marginLeft: "auto", textAlign: "right" }}>
-                <div className="stat-label" style={{ justifyContent: "flex-end" }}>In transit</div>
-                <div className="stat-value" style={{ fontSize: 20 }}>{fmtUsdCompact(cash.inTransit.amount)}</div>
-                <div className="hero-sub">not yet settled</div>
+      <div className="grid" style={{ gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1.15fr)" }}>
+        <Card className="fill">
+          {cash.cashKnown ? (
+            <>
+              <div className="stat-label">Available to spend right now</div>
+              <div className="hero-figure">{fmtUsd(cash.availableCash)}</div>
+              <div className="hero-sub">
+                of {fmtUsd(cash.totalCash)} total cash ·{" "}
+                <a className="link" onClick={openAvailableCashDrill}>why? →</a>
               </div>
-            )}
-          </div>
-          <div style={{ marginTop: 18 }}>
+            </>
+          ) : (
+            <>
+              {/* No bank feed: subtracting real obligations from unknown cash would
+                  print a confident deficit that is not true. State what is known. */}
+              <div className="stat-label">Committed and already owed</div>
+              <div className="hero-figure">{fmtUsd(cash.obligationsTotal)}</div>
+              <div className="hero-sub">
+                Cash on hand is <strong>not connected</strong> ·{" "}
+                <a className="link" onClick={() => app.navigate("datasources")}>connect an account →</a>
+              </div>
+            </>
+          )}
+
+          <div style={{ marginTop: 16 }}>
             <SplitMeter
               segments={cashSegments}
               fmt={(v) => fmtUsdCompact(v)}
               onSegmentClick={openAvailableCashDrill}
             />
           </div>
-          <p className="muted" style={{ fontSize: 11.5, marginTop: 12 }}>
-            {cash.cashKnown
-              ? "Every blue segment is money that already belongs to someone else — tax authorities, vendors, your card. Only the green is yours to deploy."
-              : "These are obligations Meridian can see from Shopify. Without a bank connection it cannot tell you whether your cash covers them."}
-          </p>
-          {cash.cashKnown && <div style={{ marginTop: 14 }}>
-            <div className="band-title" style={{ marginBottom: 8 }}>
-              Projected available cash <span className="badge estimate">est.</span>
-            </div>
-            <div className="grid cols-3" style={{ gap: 8 }}>
-              {projections.map((pr) => (
-                <MiniStat key={pr.label} label={pr.label} value={fmtUsdCompact(pr.value)}
-                  tone={pr.value < CASH_FLOOR ? "bad" : undefined}
-                  sub={pr.value < CASH_FLOOR ? "below floor" : undefined} />
-              ))}
-            </div>
-            <p className="muted" style={{ fontSize: 11.5, marginTop: 8 }}>
-              Tightest moment: <strong style={{ color: fc.trough.available < CASH_FLOOR ? "var(--delta-bad)" : "var(--ink)" }}>
-                {fmtUsdCompact(fc.trough.available)}
-              </strong> around {fmtDate(fc.trough.date)}
-              {fc.trough.available < CASH_FLOOR
-                ? ` — below your ${fmtUsdCompact(CASH_FLOOR)} floor.`
-                : ` — stays above your ${fmtUsdCompact(CASH_FLOOR)} floor.`}
-            </p>
-          </div>}
-        </Card>
 
-        {!cash.cashKnown ? (
-          <Card title="What's missing">
-            <p className="muted" style={{ fontSize: 12.5, lineHeight: 1.6 }}>
-              Shopify tells Meridian what you sold. It cannot tell you what you kept.
-              These connections turn revenue into a full financial picture:
+          {cash.cashKnown && (
+            <>
+              <div className="grid cols-3" style={{ gap: 8, marginTop: 14 }}>
+                {projections.map((pr) => (
+                  <MiniStat key={pr.label} label={pr.label} value={fmtUsdCompact(pr.value)}
+                    tone={pr.value < CASH_FLOOR ? "bad" : undefined}
+                    sub={pr.value < CASH_FLOOR ? "below floor" : undefined} />
+                ))}
+              </div>
+              <p className="muted" style={{ fontSize: 11.5, marginTop: 8 }}>
+                Tightest moment:{" "}
+                <strong style={{ color: fc.trough.available < CASH_FLOOR ? "var(--delta-bad)" : "var(--ink)" }}>
+                  {fmtUsdCompact(fc.trough.available)}
+                </strong>{" "}
+                around {fmtDate(fc.trough.date)}
+                {fc.trough.available < CASH_FLOOR ? " — below your floor." : " — stays above your floor."}
+              </p>
+            </>
+          )}
+          {!cash.cashKnown && (
+            <p className="muted" style={{ fontSize: 11.5, marginTop: "auto", paddingTop: 14 }}>
+              Every segment above is money Meridian can read from Shopify and knows you owe.
+              Whether your cash covers it is the one thing it cannot tell you yet.
             </p>
-            <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 12 }}>
-              {MISSING_SOURCES.map((m) => (
-                <div key={m.title} style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
-                  <span className="dot" style={{ background: "var(--warning)", width: 7, height: 7, borderRadius: "50%", marginTop: 6, flexShrink: 0 }} />
-                  <div>
-                    <div style={{ fontSize: 12.5, fontWeight: 600 }}>{m.title}</div>
-                    <div className="muted" style={{ fontSize: 11.5 }}>{m.unlocks}</div>
-                  </div>
-                </div>
-              ))}
-            </div>
-            <button className="btn primary" style={{ marginTop: 14 }} onClick={() => app.navigate("datasources")}>
-              Open Data Sources →
-            </button>
-          </Card>
-        ) : (
-        <Card title="90-day cash outlook" right={<span className="badge estimate">est.</span>}>
-          <LineChart
-            labels={fc.points.map((pt) => pt.date)}
-            series={[
-              { name: "Projected cash", color: "var(--s1)", values: fc.points.map((pt) => pt.cash), area: true },
-              { name: "Available", color: "var(--s3)", values: fc.points.map((pt) => pt.available), dashed: true },
-            ]}
-            yFmt={fmtUsdCompact}
-            height={168}
-          />
-          <div className="grid cols-2" style={{ gap: 8, marginTop: 10 }}>
-            <MiniStat label="Inflows (30d)" value={fmtUsdCompact(fc.expectedInflows30)} tone="good" />
-            <MiniStat label="Outflows (30d)" value={fmtUsdCompact(fc.expectedExpenses30 + fc.inventoryPurchases30 + fc.taxPayments30)} tone="bad" />
-          </div>
-          {fc.warnings.length > 0 && (
-            <div className="insight warning" style={{ marginTop: 10 }}>
-              <div className="insight-detail">{fc.warnings[0]}</div>
-            </div>
           )}
         </Card>
-        )}
+
+        <Card
+          title="Net revenue by month"
+          right={
+            <span className="seg">
+              {([12, 24, "all"] as const).map((sp) => (
+                <button key={String(sp)} className={monthSpan === sp ? "on" : ""} onClick={() => setMonthSpan(sp)}>
+                  {sp === "all" ? "all" : `${sp}m`}
+                </button>
+              ))}
+            </span>
+          }
+        >
+          <BarChart
+            labels={monthly.keys}
+            series={[{ name: "Net revenue", color: "var(--s1)", values: monthly.values }]}
+            xFmt={(k) => monthLabel(k, monthSpan !== 12)}
+            yFmt={fmtUsdCompact}
+            height={196}
+            showLegend={false}
+            directLabelIndex={monthly.values.length - 1}
+          />
+          <div className="grid cols-3" style={{ gap: 8, marginTop: 10 }}>
+            <MiniStat label="Best month" value={fmtUsdCompact(monthly.best.value)} sub={monthLabel(monthly.best.date, true)} />
+            <MiniStat label="Monthly average" value={fmtUsdCompact(monthly.avg)} />
+            <MiniStat
+              label="Last 3 vs prior 3"
+              value={monthly.momentum === null ? "—" : `${monthly.momentum > 0 ? "+" : monthly.momentum < 0 ? "−" : ""}${fmtPct(Math.abs(monthly.momentum), 0)}`}
+              tone={monthly.momentum === null ? undefined : monthly.momentum > 0.005 ? "good" : monthly.momentum < -0.005 ? "bad" : undefined}
+            />
+          </div>
+        </Card>
       </div>
 
       {/* ── Performance stat tiles ──────────────────────── */}
@@ -287,80 +297,106 @@ export default function CommandCenter() {
         )}
       </div>
 
-      {/* ── Revenue + forecast ──────────────────────────── */}
-      <Card title="Net revenue — last 60 days + 14-day forecast" right={<span className="badge estimate">forecast = est.</span>}>
-        <LineChart
-          labels={revChart.labels}
-          series={[
-            { name: "Actual", color: "var(--s1)", values: revChart.actual, area: true },
-            { name: "Forecast", color: "var(--s1)", values: revChart.forecast, dashed: true },
-          ]}
-          band={{ ...revChart.band, color: "var(--s1)" }}
-          yFmt={fmtUsdCompact}
-          markerIndex={revChart.labels.indexOf(store.siteUpdateDay)}
-          markerLabel="site update"
-          height={220}
-          showLegend={false}
-        />
-      </Card>
-
-      {/* ── What changed / financial position ───────────── */}
-      <div className="grid cols-2">
-        <Card title="What changed — and why">
-          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            {[...risks.slice(0, 4), ...briefing.wins.slice(0, 1)].map((i) => (
-              <InsightCard key={i.id} ins={i} spark={i.metric ? spark[i.metric] : undefined} />
-            ))}
-          </div>
-        </Card>
-
-        <Card title="Financial position">
-          <div className="stmt">
-            {briefing.financialPosition.map((f) => (
-              <div className="stmt-row" key={f.label}>
-                <span className="lbl">{f.label}{f.estimate && <span className="badge estimate">est.</span>}</span>
-                <span className={f.tone === "bad" ? "neg" : f.tone === "good" ? "pos" : ""}>{f.value}</span>
-              </div>
-            ))}
-          </div>
-          <div className="grid cols-2" style={{ gap: 8, marginTop: 14 }}>
-            <MiniStat label="Inventory at cost" value={fmtUsdCompact(invCap.atCost)} sub={`retail ${fmtUsdCompact(invCap.atRetail)}`} />
-            <MiniStat label="Sales tax owed" value={fmtUsdCompact(stx.currentPayable)} sub="imported" />
-          </div>
-          <div style={{ marginTop: 14 }}>
-            <div className="band-title" style={{ marginBottom: 8 }}>Health drivers</div>
-            <ScoreBars items={health.components.slice(0, 5)} />
-          </div>
-        </Card>
-      </div>
-
       {/* ── WHAT SHOULD I DO ────────────────────────────── */}
-      <Card title={<>What should I do? <span className="muted" style={{ textTransform: "none", letterSpacing: 0 }}>ranked by impact × confidence × urgency ÷ difficulty</span></>}>
-        <div style={{ display: "flex", flexDirection: "column", gap: 8 }} key={recTick}>
-          {briefing.actions.map((r, i) => (
-            <ActionCard key={r.id} r={r} rank={i + 1} maxImpact={maxImpact}
+      <Card
+        title={<>What should I do? <span className="muted" style={{ textTransform: "none", letterSpacing: 0 }}>ranked by impact × confidence × urgency ÷ difficulty</span></>}
+        right={briefing.actions.length > 4 ? (
+          <button className="btn" onClick={() => setShowAllActions((v) => !v)}>
+            {showAllActions ? "Top 4" : `All ${briefing.actions.length}`}
+          </button>
+        ) : undefined}
+      >
+        <div style={{ display: "flex", flexDirection: "column", gap: 6 }} key={recTick}>
+          {(showAllActions ? briefing.actions : briefing.actions.slice(0, 4)).map((r, i) => (
+            <ActionCard key={r.id} r={r} rank={i + 1} maxScore={maxScore}
               status={recStatus(r.id)} onStatus={markStatus} onOpen={() => r.drill && app.navigate(r.drill)} />
           ))}
         </div>
       </Card>
 
-      {/* ── Full metric grid, retained but demoted ──────── */}
+      {/* ── What changed · outlook or the gaps in coverage ── */}
+      <div className="grid cols-2">
+        <Card title="What changed — and why">
+          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            {[...risks.slice(0, 3), ...briefing.wins.slice(0, 1)].map((i) => (
+              <InsightCard key={i.id} ins={i} spark={i.metric ? spark[i.metric] : undefined} />
+            ))}
+          </div>
+        </Card>
+
+        {cash.cashKnown ? (
+          <Card title="90-day cash outlook" right={<span className="badge estimate">est.</span>}>
+            <LineChart
+              labels={fc.points.map((pt) => pt.date)}
+              series={[
+                { name: "Projected cash", color: "var(--s1)", values: fc.points.map((pt) => pt.cash), area: true },
+                { name: "Available", color: "var(--s3)", values: fc.points.map((pt) => pt.available), dashed: true },
+              ]}
+              yFmt={fmtUsdCompact}
+              height={168}
+            />
+            <div className="grid cols-2" style={{ gap: 8, marginTop: 10 }}>
+              <MiniStat label="Inflows (30d)" value={fmtUsdCompact(fc.expectedInflows30)} tone="good" />
+              <MiniStat label="Outflows (30d)" value={fmtUsdCompact(fc.expectedExpenses30 + fc.inventoryPurchases30 + fc.taxPayments30)} tone="bad" />
+            </div>
+            {fc.warnings.length > 0 && (
+              <div className="insight warning" style={{ marginTop: 10 }}>
+                <div className="insight-detail">{fc.warnings[0]}</div>
+              </div>
+            )}
+          </Card>
+        ) : (
+          <Card
+            title="What Meridian can see"
+            right={<button className="btn primary" onClick={() => app.navigate("datasources")}>Connect →</button>}
+          >
+            <CapabilityStrip caps={cap} />
+            <div className="band-title" style={{ margin: "16px 0 8px" }}>Health drivers</div>
+            <ScoreBars items={health.components.slice(0, 5)} />
+          </Card>
+        )}
+      </div>
+
+      {/* ── Everything else, retained but collapsed ────── */}
       <Card
-        title="All metrics"
+        title="Financial position and all metrics"
         right={
           <button className="btn" onClick={() => setShowAll((v) => !v)}>
-            {showAll ? "Hide" : `Show all ${METRIC_GROUPS.reduce((t, g) => t + g.items.length, 0)}`}
+            {showAll ? "Hide" : `Show ${METRIC_GROUPS.reduce((t, g) => t + g.items.length, 0)}`}
           </button>
         }
       >
         {!showAll && (
           <p className="muted" style={{ fontSize: 12 }}>
-            Every KPI — sales, profitability, cash, marketing and customers — with comparisons
-            against yesterday, the previous period, last year, forecast and target.
+            The full position statement and every KPI — sales, profitability, cash, marketing
+            and customers — with comparisons against the previous period, last year and target.
           </p>
         )}
         {showAll && (
-          <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+            <div className="grid cols-2">
+              <div>
+                <div className="band-title" style={{ marginBottom: 8 }}>Financial position</div>
+                <div className="stmt">
+                  {briefing.financialPosition.map((f) => (
+                    <div className="stmt-row" key={f.label}>
+                      <span className="lbl">{f.label}{f.estimate && <span className="badge estimate">est.</span>}</span>
+                      <span className={f.tone === "bad" ? "neg" : f.tone === "good" ? "pos" : ""}>{f.value}</span>
+                    </div>
+                  ))}
+                </div>
+                <div className="grid cols-2" style={{ gap: 8, marginTop: 12 }}>
+                  <MiniStat label="Inventory at cost" value={fmtUsdCompact(invCap.atCost)} sub={`retail ${fmtUsdCompact(invCap.atRetail)}`} />
+                  <MiniStat label="Sales tax owed" value={fmtUsdCompact(stx.currentPayable)} sub="imported" />
+                </div>
+              </div>
+              {cash.cashKnown && (
+                <div>
+                  <div className="band-title" style={{ marginBottom: 8 }}>Health drivers</div>
+                  <ScoreBars items={health.components} />
+                </div>
+              )}
+            </div>
             {METRIC_GROUPS.map((g) => (
               <div key={g.title}>
                 <div className="band-title" style={{ marginBottom: 8 }}>{g.title}</div>
@@ -501,12 +537,58 @@ function UnknownTile({ label, needs, onClick }: { label: string; needs: string; 
   );
 }
 
-const MISSING_SOURCES = [
-  { title: "Bank or card account", unlocks: "Cash, available cash, runway and the cash-flow forecast" },
-  { title: "Product costs", unlocks: "Gross profit, margin, contribution and true product ranking" },
-  { title: "Web analytics", unlocks: "Sessions, conversion rate and the purchase funnel" },
-  { title: "Ad platforms", unlocks: "CAC, ROAS, MER and profit per ad dollar" },
-];
+/**
+ * "2026-07" → "Jul", or "Jan '26" where the year turns over. Past twelve months the
+ * bare month name is ambiguous — three "Aug" ticks in a row say nothing — so longer
+ * spans stamp the year on every tick.
+ */
+function monthLabel(key: string, alwaysYear = false): string {
+  const [y, m] = key.split("-").map(Number);
+  const name = MONTHS[(m ?? 1) - 1] ?? key;
+  return alwaysYear || m === 1 ? `${name} '${String(y).slice(2)}` : name;
+}
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+const CAP_SHORT: Record<keyof Capabilities, string> = {
+  cash: "Cash & cards",
+  cogs: "Product costs",
+  sessions: "Web analytics",
+  adSpend: "Ad platforms",
+  customers: "Customers",
+  inventory: "Inventory",
+  expenses: "Expenses",
+  units: "Unit quantities",
+};
+
+/**
+ * Eight pills: what this dataset knows, and what it does not. Replaces a paragraph
+ * explaining the same thing — coverage is a shape you read, not a list you parse.
+ */
+function CapabilityStrip({ caps }: { caps: Capabilities }) {
+  const keys = Object.keys(CAP_SHORT) as (keyof Capabilities)[];
+  // Sales always counts as present — the dataset exists because orders were imported.
+  const have = 1 + keys.filter((k) => caps[k]).length;
+  return (
+    <>
+      <div className="cap-count">
+        <strong>{have}</strong> of {keys.length + 1} data sources feeding the dashboard
+      </div>
+      <div className="cap-strip">
+        <span className="cap on" title="Orders, revenue, discounts, refunds and sales tax — imported">
+          <span className="dot" />
+          Sales &amp; orders
+        </span>
+        {keys.map((k) => (
+          <span key={k} className={`cap ${caps[k] ? "on" : "off"}`}
+            title={`${caps[k] ? "Connected" : `Needs ${CAPABILITY_LABELS[k].needs}`} — ${CAPABILITY_LABELS[k].gates}`}>
+            <span className="dot" />
+            {CAP_SHORT[k]}
+          </span>
+        ))}
+      </div>
+    </>
+  );
+}
 
 function MiniStat({ label, value, sub, tone }: { label: string; value: string; sub?: string; tone?: "good" | "bad" }) {
   return (
@@ -526,28 +608,28 @@ function InsightCard({ ins, spark }: { ins: Insight; spark?: number[] }) {
   const app = useApp();
   const cls = ins.kind === "win" ? "win" : ins.severity;
   return (
-    <div className={`insight ${cls}`}>
+    <div className={`insight compact ${cls}`}>
       <div style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div className="insight-title">{ins.title}</div>
-          <div className="insight-detail">{ins.detail}</div>
+          <div className={`insight-detail ${open ? "" : "clamp-2"}`}>{ins.detail}</div>
+          <div className="row-controls">
+            <button className="linkish" onClick={() => setOpen(!open)}>{open ? "Less" : "Why?"}</button>
+            {ins.drill && <button className="linkish" onClick={() => app.navigate(ins.drill!)}>Open →</button>}
+            <span className="muted" style={{ fontSize: 10.5 }}>{ins.confidencePct}% confidence</span>
+          </div>
         </div>
         <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4, flexShrink: 0 }}>
-          <span className="badge">{ins.confidencePct}% conf.</span>
           {spark && spark.length > 1 && (
             <Sparkline values={spark} width={86} height={26}
               color={ins.kind === "win" ? "var(--good)" : "var(--s8)"} />
           )}
           {ins.estMonthlyImpact !== undefined && ins.estMonthlyImpact !== 0 && (
-            <span style={{ fontSize: 11, fontWeight: 600, color: ins.estMonthlyImpact < 0 ? "var(--delta-bad)" : "var(--delta-good)" }}>
+            <span style={{ fontSize: 12, fontWeight: 700, color: ins.estMonthlyImpact < 0 ? "var(--delta-bad)" : "var(--delta-good)" }}>
               {fmtUsdCompact(ins.estMonthlyImpact, true)}/mo
             </span>
           )}
         </div>
-      </div>
-      <div className="rec-actions">
-        <button className="btn" onClick={() => setOpen(!open)}>{open ? "Hide evidence" : "Why?"}</button>
-        {ins.drill && <button className="btn" onClick={() => app.navigate(ins.drill!)}>Open →</button>}
       </div>
       {open && (
         <div className="evidence">
@@ -560,44 +642,60 @@ function InsightCard({ ins, spark }: { ins: Insight; spark?: number[] }) {
   );
 }
 
-function ActionCard({ r, rank, maxImpact, status, onStatus, onOpen }: {
-  r: Recommendation; rank: number; maxImpact: number;
+function ActionCard({ r, rank, maxScore, status, onStatus, onOpen }: {
+  r: Recommendation; rank: number; maxScore: number;
   status: RecStatus; onStatus: (id: string, s: RecStatus) => void; onOpen: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const tone = rank === 1 ? "critical" : rank <= 3 ? "warning" : "info";
   return (
-    <div className={`insight ${status !== "open" ? "" : tone}`} style={status !== "open" ? { opacity: 0.5 } : undefined}>
+    <div className={`insight compact ${status !== "open" ? "" : tone}`} style={status !== "open" ? { opacity: 0.5 } : undefined}>
       <div style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
+        <span className="rank">{rank}</span>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div className="insight-title">{rank}. {r.title}</div>
-          <div className="insight-detail">{r.action}</div>
-        </div>
-        <div style={{ width: 132, flexShrink: 0, textAlign: "right" }}>
-          <div style={{ fontSize: 13, fontWeight: 700 }}>{fmtUsdCompact(r.impactMonthly)}<span className="muted" style={{ fontSize: 10.5, fontWeight: 400 }}>/mo</span></div>
-          <div className="impact-track" style={{ marginTop: 4 }}>
-            <div className="impact-fill" style={{ width: `${Math.max(4, (r.impactMonthly / maxImpact) * 100)}%` }} />
+          <div className="insight-title">{r.title}</div>
+          <div className={`insight-detail ${open ? "" : "clamp-2"}`}>{r.action}</div>
+          <div className="row-controls">
+            <button className="linkish" onClick={() => setOpen(!open)}>{open ? "Less" : "Why?"}</button>
+            {r.drill && <button className="linkish" onClick={onOpen}>Open →</button>}
+            <button className={`linkish ${status === "done" ? "on" : ""}`}
+              onClick={() => onStatus(r.id, status === "done" ? "open" : "done")}>
+              {status === "done" ? "✓ Done" : "Mark done"}
+            </button>
+            <span className="muted" style={{ fontSize: 10.5 }}>
+              {r.confidencePct}% confidence{r.cashRequired > 0 ? ` · needs ${fmtUsdCompact(r.cashRequired)}` : ""}
+            </span>
           </div>
-          <div className="muted" style={{ fontSize: 10.5, marginTop: 4 }}>
-            {r.confidencePct}% conf.{r.cashRequired > 0 ? ` · ${fmtUsdCompact(r.cashRequired)} cash` : ""}
+        </div>
+        <div style={{ width: 116, flexShrink: 0, textAlign: "right" }}>
+          {r.impactMonthly === null ? (
+            <div className="muted" style={{ fontSize: 11, lineHeight: 1.3 }}
+              title="A monthly dollar impact needs more revenue than this business currently does">
+              impact not<br />estimable yet
+            </div>
+          ) : (
+            <div style={{ fontSize: 14, fontWeight: 700 }}>
+              {fmtUsdCompact(r.impactMonthly)}<span className="muted" style={{ fontSize: 10.5, fontWeight: 400 }}>/mo</span>
+            </div>
+          )}
+          <div className="impact-track" style={{ marginTop: 5 }} title="Priority score — impact × confidence × urgency ÷ difficulty">
+            <div className="impact-fill" style={{ width: `${Math.max(4, (r.score / maxScore) * 100)}%` }} />
           </div>
         </div>
-      </div>
-      <div className="rec-actions">
-        <button className="btn" onClick={() => setOpen(!open)}>{open ? "Hide" : "Why?"}</button>
-        {r.drill && <button className="btn" onClick={onOpen}>Open →</button>}
-        {(["done", "ignored", "remind", "investigate"] as RecStatus[]).map((s) => (
-          <button key={s} className={`btn ${status === s ? "done" : ""}`} onClick={() => onStatus(r.id, status === s ? "open" : s)}>
-            {status === s ? "✓ " : ""}{s === "done" ? "Done" : s === "ignored" ? "Ignore" : s === "remind" ? "Remind me" : "Investigate"}
-          </button>
-        ))}
       </div>
       {open && (
         <div style={{ width: "100%" }}>
-          <div className="insight-detail">{r.reason}</div>
+          <div className="insight-detail" style={{ marginTop: 8 }}>{r.reason}</div>
           <div className="evidence">
             {r.evidence.map((e) => (
               <div key={e.label}><span className="lbl">{e.label}</span><span className="val">{e.value}</span></div>
+            ))}
+          </div>
+          <div className="rec-actions">
+            {(["done", "ignored", "remind", "investigate"] as RecStatus[]).map((s) => (
+              <button key={s} className={`btn ${status === s ? "done" : ""}`} onClick={() => onStatus(r.id, status === s ? "open" : s)}>
+                {status === s ? "✓ " : ""}{s === "done" ? "Done" : s === "ignored" ? "Ignore" : s === "remind" ? "Remind me" : "Investigate"}
+              </button>
             ))}
           </div>
         </div>

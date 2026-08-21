@@ -148,10 +148,12 @@ All 27 sections are functional against the simulated dataset:
 
 Highlights:
 
-- **Command Center** — a health gauge and briefing, one hero figure (available cash) with
-  its composition meter, stat tiles carrying 30-day trend, what changed / why / what's
-  next / where is my money / **what should I do** ranked by
-  `impact × confidence × urgency ÷ difficulty`, and all 28 KPIs grouped below.
+- **Command Center** — six bands, read at a glance: a health gauge with a briefing that
+  clamps to two lines, one hero figure (available cash) with its composition meter beside
+  twelve months of revenue as bars, four stat tiles carrying their own 30-day shape,
+  **what should I do** ranked by `impact × confidence × urgency ÷ difficulty`, what
+  changed and why, and the full 28-KPI grid collapsed below. Every other explanation
+  lives behind a "Why?" rather than on the page.
 - **Double-entry ledger** — every sale, fee, refund, payout, PO, bill, tax remittance and
   owner draw is a balanced journal entry. Trial balance is asserted to be exactly zero.
 - **Inventory accounting** — FIFO lots with landed cost (manufacturing + packaging +
@@ -168,7 +170,7 @@ Highlights:
 
 ## Financial correctness is tested, not asserted
 
-`npm test` runs 60 tests covering ledger integrity, business plausibility, forecast
+`npm test` runs 64 tests covering ledger integrity, business plausibility, forecast
 behavior, scenario modelling, and every demo storyline:
 
 - trial balance is exactly 0; cash-flow statement ties opening + O + I + F = closing
@@ -179,6 +181,8 @@ behavior, scenario modelling, and every demo storyline:
 - the forecast never double-counts commitments into negative available cash
 - the briefing never claims "performance is strong" while revenue is falling
 - no recommendation ever proposes a zero-quantity action
+- no recommendation claims a monthly upside larger than the business earns in a month,
+  and below $1,000/month of revenue the dollar estimate is withheld rather than invented
 - an inverted metric (ad spend, CAC, refunds) is never praised for moving the wrong way
 - on the real dataset: no NaN or Infinity anywhere, available cash is never a fabricated
   deficit, the briefing never claims a margin without costs, the analyst declines the
