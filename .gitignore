@@ -14,3 +14,6 @@ src-tauri/gen/
 
 # TypeScript incremental build cache
 *.tsbuildinfo
+
+# Single-file browser bundle (generated)
+dist-artifact/
