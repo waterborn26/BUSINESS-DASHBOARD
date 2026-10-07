@@ -7,11 +7,12 @@ import { Drawer } from "./components/layout/Drawer";
 import { PAGES } from "./pages";
 
 function Shell() {
-  const { route } = useApp();
+  const { route, navOpen, setNavOpen } = useApp();
   const Page = PAGES[route] ?? PAGES.command;
   return (
-    <div className="app">
+    <div className={`app ${navOpen ? "nav-open" : ""}`}>
       <Sidebar />
+      {navOpen && <button className="nav-backdrop" aria-label="Close navigation" onClick={() => setNavOpen(false)} />}
       <div className="main">
         <TopBar />
         <main className="content">

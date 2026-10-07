@@ -8,16 +8,24 @@ import { fmtDateFull } from "@/lib/dates";
 export function TopBar() {
   const {
     route, preset, setPreset, compareMode, setCompareMode, setPaletteOpen,
-    store, period, dataSource, setDataSource,
+    store, period, dataSource, setDataSource, setNavOpen,
   } = useApp();
   const def = ROUTES.find((r) => r.id === route);
   const src = DATA_SOURCES.find((d) => d.id === dataSource)!;
   return (
     <header className="topbar">
+      <button className="nav-toggle" onClick={() => setNavOpen(true)} aria-label="Open navigation">
+        <svg width="17" height="17" viewBox="0 0 17 17" aria-hidden="true">
+          <g stroke="currentColor" strokeWidth="1.6" strokeLinecap="round">
+            <path d="M2 4.5h13M2 8.5h13M2 12.5h13" />
+          </g>
+        </svg>
+      </button>
       <h1>
         {def?.label ?? "Meridian"}
         <span className="sub">{fmtDateFull(period.start)} – {fmtDateFull(period.end)}</span>
       </h1>
+      <div className="topbar-controls">
       <div className="seg" role="group" aria-label="Date range">
         {RANGE_PRESETS.filter((p) => !["yesterday", "14d", "qtd"].includes(p.id)).map((p) => (
           <button key={p.id} className={preset === p.id ? "on" : ""} onClick={() => setPreset(p.id)}>
@@ -45,6 +53,7 @@ export function TopBar() {
       {src.real
         ? <span className="badge imported" title={`Shopify snapshot · ${store.today}`}>● live data</span>
         : <span className="badge estimate" title="Simulated brand — not your business">● simulated</span>}
+      </div>
     </header>
   );
 }

@@ -19,6 +19,8 @@ interface AppState {
   setDataSource: (id: DataSourceId) => void;
   route: string;
   navigate: (r: string) => void;
+  navOpen: boolean;
+  setNavOpen: (b: boolean) => void;
   preset: RangePreset;
   setPreset: (p: RangePreset) => void;
   period: Period;
@@ -63,11 +65,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [theme, setThemeState] = useState<"dark" | "light">(LS.get("theme", "dark") as "dark" | "light");
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [drill, setDrill] = useState<DrillContent | null>(null);
+  const [navOpen, setNavOpen] = useState(false);
 
   const navigate = useCallback((r: string) => {
     setRoute(r);
     LS.set("route", r);
     setDrill(null);
+    setNavOpen(false); // on a phone the nav is a drawer over the page
   }, []);
   const setPreset = useCallback((p: RangePreset) => { setPresetState(p); LS.set("preset", p); }, []);
   const setDataSource = useCallback((id: DataSourceId) => {
@@ -136,7 +140,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const value: AppState = {
     store, dataSource, setDataSource,
     route, navigate, preset, setPreset, period,
-    compareMode, setCompareMode, theme, setTheme,
+    compareMode, setCompareMode, theme, setTheme, navOpen, setNavOpen,
     paletteOpen, setPaletteOpen,
     drill, openDrill: setDrill, closeDrill: () => setDrill(null),
   };

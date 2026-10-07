@@ -176,7 +176,7 @@ export default function CommandCenter() {
 
       {/* ── Where I stand: the money, and the shape of the year ── */}
       <div className="band-title">Where I stand</div>
-      <div className="grid" style={{ gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1.15fr)" }}>
+      <div className="grid split">
         <Card className="fill">
           {cash.cashKnown ? (
             <>
@@ -308,7 +308,7 @@ export default function CommandCenter() {
 
       {/* ── WHAT SHOULD I DO ────────────────────────────── */}
       <Card
-        title={<>What should I do? <span className="muted" style={{ textTransform: "none", letterSpacing: 0 }}>ranked by impact × confidence × urgency ÷ difficulty</span></>}
+        title={<>What should I do? <span className="title-note">ranked by impact × confidence × urgency ÷ difficulty</span></>}
         right={briefing.actions.length > 4 ? (
           <button className="btn" onClick={() => setShowAllActions((v) => !v)}>
             {showAllActions ? "Top 4" : `All ${briefing.actions.length}`}
@@ -659,7 +659,7 @@ function ActionCard({ r, rank, maxScore, status, onStatus, onOpen }: {
   const tone = rank === 1 ? "critical" : rank <= 3 ? "warning" : "info";
   return (
     <div className={`insight compact ${status !== "open" ? "" : tone}`} style={status !== "open" ? { opacity: 0.5 } : undefined}>
-      <div style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
+      <div className="act-row">
         <span className="rank">{rank}</span>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div className="insight-title">{r.title}</div>
@@ -676,15 +676,15 @@ function ActionCard({ r, rank, maxScore, status, onStatus, onOpen }: {
             </span>
           </div>
         </div>
-        <div style={{ width: 116, flexShrink: 0, textAlign: "right" }}>
+        <div className="act-impact">
           {r.impactMonthly === null ? (
             <div className="muted" style={{ fontSize: 11, lineHeight: 1.3 }}
               title="A monthly dollar impact needs more revenue than this business currently does">
               impact not<br />estimable yet
             </div>
           ) : (
-            <div style={{ fontSize: 14, fontWeight: 700 }}>
-              {fmtUsdCompact(r.impactMonthly)}<span className="muted" style={{ fontSize: 10.5, fontWeight: 400 }}>/mo</span>
+            <div className="act-impact-figure">
+              {fmtUsdCompact(r.impactMonthly)}<span className="muted">/mo</span>
             </div>
           )}
           <div className="impact-track" style={{ marginTop: 5 }} title="Priority score — impact × confidence × urgency ÷ difficulty">

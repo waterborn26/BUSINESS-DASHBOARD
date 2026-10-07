@@ -74,6 +74,12 @@ The first `tauri build` compiles the whole Rust dependency tree and takes severa
 minutes; later builds are fast. The app is unsigned, so the first launch needs
 right-click → Open (or System Settings → Privacy & Security → Open Anyway).
 
+### On a phone
+
+The same build works on a phone and tablet: the nav becomes a drawer, the top bar
+wraps into a scrollable strip, and wide pairings collapse to a single column.
+Verified with no horizontal overflow from 375px to 1512px.
+
 ### Other commands
 
 ```bash
