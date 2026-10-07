@@ -95,14 +95,15 @@ export default function CommandCenter() {
     const values = buckets.map((b) => b.value);
     const best = buckets.reduce((a, b) => (b.value > a.value ? b : a), buckets[0] ?? { date: "", value: 0 });
     const sum = values.reduce((t, v) => t + v, 0);
-    const last3 = values.slice(-3).reduce((t, v) => t + v, 0);
-    const prior3 = values.slice(-6, -3).reduce((t, v) => t + v, 0);
+    const recent = periodTotals(store, { start: addDays(today, -89), end: today }).netRevenue;
+    const prior = periodTotals(store, { start: addDays(today, -179), end: addDays(today, -90) }).netRevenue;
     return {
       keys: buckets.map((b) => b.date),
       values,
       best,
       avg: values.length ? sum / values.length : 0,
-      momentum: prior3 > 0 ? (last3 - prior3) / prior3 : null,
+      momentum: prior > 0 ? (recent - prior) / prior : null,
+      momentumFromNothing: prior <= 0 && recent > 0,
       rangeLabel: buckets.length ? `${monthLabel(buckets[0].date)} – ${monthLabel(buckets[buckets.length - 1].date)}` : "",
     };
   }, [store, monthSpan]);
@@ -259,9 +260,17 @@ export default function CommandCenter() {
             <MiniStat label="Best month" value={fmtUsdCompact(monthly.best.value)} sub={monthLabel(monthly.best.date, true)} />
             <MiniStat label="Monthly average" value={fmtUsdCompact(monthly.avg)} />
             <MiniStat
-              label="Last 3 vs prior 3"
-              value={monthly.momentum === null ? "—" : `${monthly.momentum > 0 ? "+" : monthly.momentum < 0 ? "−" : ""}${fmtPct(Math.abs(monthly.momentum), 0)}`}
-              tone={monthly.momentum === null ? undefined : monthly.momentum > 0.005 ? "good" : monthly.momentum < -0.005 ? "bad" : undefined}
+              label="Last 90d vs prior 90d"
+              value={
+                monthly.momentumFromNothing ? "restarted"
+                  : monthly.momentum === null ? "—"
+                  : `${monthly.momentum > 0 ? "+" : monthly.momentum < 0 ? "−" : ""}${fmtPct(Math.abs(monthly.momentum), 0)}`
+              }
+              tone={
+                monthly.momentumFromNothing ? "good"
+                  : monthly.momentum === null ? undefined
+                  : monthly.momentum > 0.005 ? "good" : monthly.momentum < -0.005 ? "bad" : undefined
+              }
             />
           </div>
         </Card>

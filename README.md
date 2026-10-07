@@ -86,7 +86,7 @@ npm run build    # production web bundle
 
 The top-bar selector switches between:
 
-- **WaterBorn Workshop** — your real Shopify history. 811 orders and $51,838 gross since
+- **WaterBorn Workshop** — your real Shopify history. 878 orders and $57,171 gross since
   Aug 2023, reconciled to Shopify's own reported totals. This is the default.
 - **Demo dataset** — a fully-connected simulated brand, useful for seeing every feature
   populated.

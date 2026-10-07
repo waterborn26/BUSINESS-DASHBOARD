@@ -200,7 +200,7 @@ export function buildRealStore(): Store {
     {
       id: "shopify", name: "Shopify — WaterBorn Workshop", category: "Ecommerce",
       status: "connected", lastSync: REAL_META.snapshotDate,
-      detail: `Snapshot of ${REAL_META.domain}: 811 orders, $51,838 gross since ${REAL_META.firstDay}.`,
+      detail: `Snapshot of ${REAL_META.domain}: 878 orders, $57,171 gross since ${REAL_META.firstDay}.`,
     },
     { id: "plaid", name: "Bank feed (Plaid or CSV)", category: "Banking", status: "available", detail: "Needed for cash, available cash and expenses." },
     { id: "cogs", name: "Product costs (manual or CSV)", category: "Manual", status: "available", detail: "Needed for gross profit, margin and contribution." },

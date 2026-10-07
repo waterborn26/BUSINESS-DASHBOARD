@@ -37,7 +37,7 @@ export interface Recommendation {
 }
 
 /** Below $1,000/month of revenue, a monthly-impact estimate is noise, not a number. */
-const IMPACT_FLOOR = 100_000;
+export const IMPACT_FLOOR = 100_000;
 
 /** Channels the business pays for by the click — throttling these is a real lever. */
 const PAID_SOURCES = ["meta", "google", "tiktok"];

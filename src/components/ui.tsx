@@ -25,7 +25,12 @@ export function Delta({ current, base, invert, digits = 1 }: {
   current: number; base: number; invert?: boolean; digits?: number;
 }) {
   const d = pctChange(current, base);
-  if (d === null) return <span className="delta flat">—</span>;
+  // A percentage off a zero base is undefined, but "—" reads as missing data. Say what
+  // actually happened: there was nothing before, and there is something now.
+  if (d === null) {
+    if (base === 0 && current > 0) return <span className="delta up">↑ new</span>;
+    return <span className="delta flat">—</span>;
+  }
   const good = invert ? d < 0 : d > 0;
   const cls = Math.abs(d) < 0.002 ? "flat" : good ? "up" : "down";
   const arrow = Math.abs(d) < 0.002 ? "→" : d > 0 ? "↑" : "↓";

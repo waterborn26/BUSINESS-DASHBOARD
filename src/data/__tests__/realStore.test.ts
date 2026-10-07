@@ -12,7 +12,7 @@ import { availableCash } from "@/engines/cash";
 import { cashForecast } from "@/engines/cashflow";
 import { healthScore } from "@/engines/health";
 import { detectInsights } from "@/engines/insights";
-import { recommendations } from "@/engines/recommend";
+import { IMPACT_FLOOR, recommendations } from "@/engines/recommend";
 import { dailyBriefing, answerQuestion } from "@/engines/briefing";
 import { inventoryRows } from "@/engines/inventory";
 import { customerKpis } from "@/engines/customers";
@@ -34,14 +34,14 @@ describe("real Shopify snapshot", () => {
   it("reconciles to Shopify's own reported totals", () => {
     const orders = REAL_DAYS.reduce((t, d) => t + d.orders, 0);
     const gross = REAL_DAYS.reduce((t, d) => t + d.gross, 0);
-    expect(orders).toBe(811);
-    expect(gross).toBe(5_183_752); // $51,837.52 as reported by Shopify
+    expect(orders).toBe(878);
+    expect(gross).toBe(5_717_145); // $57,171.45 as reported by Shopify
   });
 
   it("carries the real catalog and channel mix", () => {
-    expect(REAL_PRODUCTS.length).toBe(25);
+    expect(REAL_PRODUCTS.length).toBe(40);
     expect(REAL_PRODUCTS.some((p) => p.name === "THE CREEDSMAN BELT")).toBe(true);
-    expect(REAL_CHANNELS.reduce((t, c) => t + c.orders, 0)).toBe(811);
+    expect(REAL_CHANNELS.reduce((t, c) => t + c.orders, 0)).toBe(878);
   });
 
   it("parses product names containing dashes intact", () => {
@@ -209,11 +209,17 @@ describe("recommendation impact is bounded by what the business can produce", ()
     }
   });
 
-  it("withholds the estimate entirely at this revenue rather than inventing one", () => {
+  it("withholds the estimate below the floor and states it above", () => {
     // The engine carries defaults sized for a mid-size brand ($1,800/mo win-back, and
-    // similar). On a store doing a few hundred dollars a month those are fiction.
-    expect(monthlyRevenue).toBeLessThan(100_000);
-    for (const r of recommendations(store)) expect(r.impactMonthly).toBeNull();
+    // similar). Below the floor those are fiction and must not be printed; above it
+    // they are real but still bounded. Which side this store sits on changes as it
+    // grows, so assert the rule rather than today's revenue.
+    const recs = recommendations(store);
+    if (monthlyRevenue < IMPACT_FLOOR) {
+      for (const r of recs) expect(r.impactMonthly).toBeNull();
+    } else {
+      expect(recs.some((r) => r.impactMonthly !== null)).toBe(true);
+    }
   });
 
   it("still ranks the actions, using confidence and urgency when impact is unknown", () => {
@@ -235,5 +241,16 @@ describe("recommendation impact is bounded by what the business can produce", ()
       if (r.impactMonthly === null) continue;
       expect(r.impactMonthly).toBeLessThanOrEqual(Math.round(demoMonthly));
     }
+  });
+});
+
+describe("a period following zero revenue is not reported as flat", () => {
+  it("says sales restarted rather than calling it steady", () => {
+    const b = dailyBriefing(store);
+    const prior = periodTotals(store, { start: addDays(today, -59), end: addDays(today, -30) }).netRevenue;
+    const current = periodTotals(store, { start: addDays(today, -29), end: today }).netRevenue;
+    if (prior > 0 || current <= 0) return; // only meaningful on a zero-base period
+    expect(b.headline).not.toMatch(/flat|steady/i);
+    expect(b.headline).toMatch(/restarted/i);
   });
 });

@@ -50,6 +50,9 @@ export function dailyBriefing(store: Store): Briefing {
   const stockRisk = inventoryRows(store).find((r) => r.health === "Stockout risk");
 
   const yDev = avg30 > 0 ? (yesterday.netRevenue - avg30) / avg30 : 0;
+  // Coming off a period of literally zero revenue, a percentage is undefined — but
+  // "flat" is the one thing it certainly is not. That case gets its own sentence.
+  const fromNothing = cmp.previous.netRevenue <= 0 && cmp.current.netRevenue > 0;
   const growth = cmp.previous.netRevenue > 0
     ? (cmp.current.netRevenue - cmp.previous.netRevenue) / cmp.previous.netRevenue : 0;
   // A percentage move off a trivially small base is arithmetic, not insight: "+233%"
@@ -61,7 +64,12 @@ export function dailyBriefing(store: Store): Briefing {
   // Lead with the 30-day trend (the real signal), not a single day. A single strong or
   // weak day is context, never the headline — that is how dashboards mislead.
   const parts: string[] = [];
-  if (growth <= -0.05) {
+  if (fromNothing) {
+    parts.push(
+      `Sales have restarted: ${fmtUsd(cmp.current.netRevenue)} of net revenue over the last 30 days, ` +
+      `against nothing at all in the 30 before it` + (top ? `, led by ${top.name}` : "") + ".",
+    );
+  } else if (growth <= -0.05) {
     parts.push(
       `Revenue is softening: net revenue is down ${fmtPct(Math.abs(growth), 0)} over the last 30 days vs the prior period` +
       (yoy > 0.05 ? `, though still up ${fmtPct(yoy, 0)} year over year` : "") + ".",
