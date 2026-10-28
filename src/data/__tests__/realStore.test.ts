@@ -127,9 +127,34 @@ describe("missing data is reported as unknown, never as a confident number", () 
 
   it("declares what the Shopify-only dataset does not know", () => {
     expect(store.capabilities.cash).toBe(false);
-    expect(store.capabilities.cogs).toBe(false);
     expect(store.capabilities.sessions).toBe(false);
     expect(store.capabilities.adSpend).toBe(false);
+  });
+
+  it("knows product costs, because Shopify records them", () => {
+    // This was false for months on the assumption that Shopify holds no cost data.
+    // It does: cost per item, and it reports COGS and gross profit directly.
+    expect(store.capabilities.cogs).toBe(true);
+    const sold = REAL_DAYS.filter((d) => d.orders > 0 && d.net > 0);
+    expect(sold.some((d) => d.cogs > 0)).toBe(true);
+    const cogs = REAL_DAYS.reduce((t, d) => t + d.cogs, 0);
+    const gp = REAL_DAYS.reduce((t, d) => t + d.grossProfit, 0);
+    expect(cogs).toBeCloseTo(2_130_102, -2);  // $21,301.02 as Shopify reports it
+    expect(gp).toBeCloseTo(2_584_040, -2);    // $25,840.40
+  });
+
+  it("never reports a margin against revenue that carries no cost", () => {
+    // Shopify has a cost on about three quarters of net sales. Gross profit counts
+    // only those lines, so margin must be taken against covered revenue — dividing
+    // by all of it would understate, and net-minus-cogs would overstate.
+    const covered = REAL_DAYS.reduce((t, d) => t + d.costCovered, 0);
+    const net = REAL_DAYS.reduce((t, d) => t + d.net, 0);
+    expect(covered).toBeLessThan(net);
+    expect(covered / net).toBeGreaterThan(0.7);
+    const gp = REAL_DAYS.reduce((t, d) => t + d.grossProfit, 0);
+    const margin = gp / covered;
+    expect(margin).toBeGreaterThan(0.4);
+    expect(margin).toBeLessThan(0.7);
   });
 
   it("never presents a negative available cash derived from unknown cash", () => {
@@ -141,10 +166,11 @@ describe("missing data is reported as unknown, never as a confident number", () 
     expect(ac.availableCash).toBe(0);
   });
 
-  it("the briefing never claims a margin when costs are unknown", () => {
+  it("the briefing never claims a 100% margin", () => {
+    // The original failure this pins: with no costs, every sale looked like pure
+    // profit. Costs are connected now, so the claim must be a real figure instead.
     const b = dailyBriefing(store);
     expect(b.headline).not.toMatch(/margin is 100%/i);
-    expect(b.headline).toMatch(/no product costs|not calculated/i);
   });
 
   it("the briefing never states cash on hand it does not have", () => {

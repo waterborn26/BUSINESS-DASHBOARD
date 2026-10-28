@@ -61,7 +61,7 @@ export function buildRealStore(): Store {
       shippingRev: d?.shipping ?? 0,
       taxCollected: d?.taxes ?? 0,
       fees: 0,                        // processor fees not in this dataset
-      cogs: 0,                        // no cost data — see COGS_UNKNOWN
+      cogs: d?.cogs ?? 0,             // Shopify's own cost of goods for the day
       fulfillment: 0,
       adSpend: 0,                     // no ad platform connected
       sessions: 0,                    // no analytics connected
@@ -109,7 +109,7 @@ export function buildRealStore(): Store {
           tax: per(d.taxes),
           refund: per(d.refunds),
           fees: 0,
-          cogs: 0,
+          cogs: per(d.cogs),
           fulfillment: 0,
           isFirstOrder: true,
         });
@@ -203,7 +203,8 @@ export function buildRealStore(): Store {
       detail: `Snapshot of ${REAL_META.domain}: 1,012 orders, $64,454 gross since ${REAL_META.firstDay}.`,
     },
     { id: "plaid", name: "Bank feed (Plaid or CSV)", category: "Banking", status: "available", detail: "Needed for cash, available cash and expenses." },
-    { id: "cogs", name: "Product costs (manual or CSV)", category: "Manual", status: "available", detail: "Needed for gross profit, margin and contribution." },
+    { id: "cogs", name: "Product costs (Shopify)", category: "Commerce", status: "connected", lastSync: REAL_META.snapshotDate,
+      detail: `Cost per item from Shopify. ${REAL_META.costCoveragePct}% of net sales carry a cost; the rest have none set.` },
     { id: "ga4", name: "Google Analytics 4", category: "Analytics", status: "available", detail: "Needed for sessions, conversion and the funnel." },
     { id: "meta", name: "Meta Ads", category: "Advertising", status: "available", detail: "Needed for CAC, ROAS and MER." },
   ];
@@ -217,7 +218,7 @@ export function buildRealStore(): Store {
     // rather than treating absence as zero.
     capabilities: {
       cash: false,
-      cogs: false,
+      cogs: true,   // Shopify records cost per item and reports COGS directly
       sessions: false,
       adSpend: false,
       customers: false,

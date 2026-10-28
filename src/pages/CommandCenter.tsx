@@ -14,7 +14,7 @@ import { BarChart } from "@/components/charts/BarChart";
 import { Sparkline } from "@/components/charts/Sparkline";
 import { Gauge, ScoreBars } from "@/components/charts/Gauge";
 import { SplitMeter, type MeterSegment } from "@/components/charts/SplitMeter";
-import { addDays, fmtDate, type Period } from "@/lib/dates";
+import { addDays, daysBetween, fmtDate, RANGE_PRESETS, type Period } from "@/lib/dates";
 import { fmtNum, fmtPct, fmtRatio, fmtUsd, fmtUsdCompact } from "@/lib/money";
 import { movingAverage } from "@/lib/stats";
 import { bucketSeries, compare, periodTotals, series, type MetricId } from "@/engines/analytics";
@@ -31,12 +31,16 @@ import { CAPABILITY_LABELS, type Capabilities } from "@/domain/types";
 
 export default function CommandCenter() {
   const app = useApp();
-  const { store, openDrill } = app;
+  const { store, openDrill, period, preset } = app;
   const today = store.today;
+  // The briefing and cash panel are always about now; period performance follows
+  // whatever range the top bar has selected.
   const last30: Period = { start: addDays(today, -29), end: today };
+  const periodDays = Math.max(1, daysBetween(period.start, period.end) + 1);
+  const periodLabel = RANGE_PRESETS.find((p) => p.id === preset)?.label ?? "selected period";
 
   const briefing = useMemo(() => dailyBriefing(store), [store]);
-  const cmp = useMemo(() => compare(store, last30), [store]);
+  const cmp = useMemo(() => compare(store, period), [store, period]);
   const cash = useMemo(() => availableCash(store, today), [store]);
   const health = useMemo(() => healthScore(store), [store]);
   const fc = useMemo(() => cashForecast(store, 90), [store]);
@@ -46,7 +50,7 @@ export default function CommandCenter() {
   const ytd = useMemo(() => periodTotals(store, { start: `${today.slice(0, 4)}-01-01`, end: today }), [store]);
   const todayT = useMemo(() => periodTotals(store, { start: today, end: today }), [store]);
   // Operating profit comes from the ledger, never from netting contribution by hand.
-  const statement = useMemo(() => pnl(store, last30), [store]);
+  const statement = useMemo(() => pnl(store, period), [store, period]);
 
   const [recTick, setRecTick] = useState(0);
   const [showAll, setShowAll] = useState(false);
@@ -59,8 +63,10 @@ export default function CommandCenter() {
   // a trailing 7-day mean shows the trend the tile is actually claiming.
   const spark = useMemo(() => {
     const of = (m: MetricId) => {
-      const raw = series(store, m, { start: addDays(today, -35), end: today }).map((p) => p.value);
-      return movingAverage(raw, 7).slice(-30);
+      const smooth = periodDays >= 14 ? 7 : 1;
+      const raw = series(store, m, { start: addDays(period.start, -smooth), end: period.end })
+        .map((p) => p.value);
+      return movingAverage(raw, smooth).slice(-Math.max(2, periodDays));
     };
     return {
       net_revenue: of("net_revenue"),
@@ -76,7 +82,7 @@ export default function CommandCenter() {
       cac: of("cac"),
       mer: of("mer"),
     } as Record<string, number[]>;
-  }, [store]);
+  }, [store, period, periodDays]);
 
   // Twelve COMPLETE months. The current month is excluded on purpose — a part-month bar
   // drawn beside full ones reads as a collapse in demand that has not happened.
@@ -290,11 +296,13 @@ export default function CommandCenter() {
       </div>
 
       {/* ── Performance stat tiles ──────────────────────── */}
-      <div className="band-title">Performance · last 30 days vs previous 30</div>
+      <div className="band-title">
+        Performance · {periodLabel.toLowerCase()} vs {compareLabel(app.compareMode)}
+      </div>
       <div className="stat-row">
         <StatTile label="Net revenue" value={fmtUsdCompact(c.netRevenue)} spark={spark.net_revenue}
           current={c.netRevenue} base={p.netRevenue}
-          note={<span className="muted">{fmtUsdCompact(c.netRevenue / 30)}/day avg</span>}
+          note={<span className="muted">{fmtUsdCompact(c.netRevenue / periodDays)}/day avg</span>}
           onClick={() => app.navigate("sales")} size="lg" />
         {cap.cogs ? (
           <StatTile label="Contribution profit" value={fmtUsdCompact(c.contributionProfit)} spark={spark.contribution_profit}
@@ -540,6 +548,10 @@ export default function CommandCenter() {
       ),
     });
   }
+}
+
+function compareLabel(mode: string): string {
+  return mode === "year" ? "the same range last year" : "the range before it";
 }
 
 // ── Sub-components ───────────────────────────────────────
