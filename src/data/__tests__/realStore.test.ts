@@ -34,14 +34,14 @@ describe("real Shopify snapshot", () => {
   it("reconciles to Shopify's own reported totals", () => {
     const orders = REAL_DAYS.reduce((t, d) => t + d.orders, 0);
     const gross = REAL_DAYS.reduce((t, d) => t + d.gross, 0);
-    expect(orders).toBe(878);
-    expect(gross).toBe(5_717_145); // $57,171.45 as reported by Shopify
+    expect(orders).toBe(1012);
+    expect(gross).toBe(6_445_351); // $64,453.51 as reported by Shopify
   });
 
   it("carries the real catalog and channel mix", () => {
-    expect(REAL_PRODUCTS.length).toBe(40);
+    expect(REAL_PRODUCTS.length).toBe(87);
     expect(REAL_PRODUCTS.some((p) => p.name === "THE CREEDSMAN BELT")).toBe(true);
-    expect(REAL_CHANNELS.reduce((t, c) => t + c.orders, 0)).toBe(878);
+    expect(REAL_CHANNELS.reduce((t, c) => t + c.orders, 0)).toBe(1012);
   });
 
   it("parses product names containing dashes intact", () => {

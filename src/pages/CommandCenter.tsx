@@ -94,14 +94,23 @@ export default function CommandCenter() {
     const buckets = (monthSpan === "all" && firstSale > 0 ? all.slice(firstSale) : all).slice(-span);
     const values = buckets.map((b) => b.value);
     const best = buckets.reduce((a, b) => (b.value > a.value ? b : a), buckets[0] ?? { date: "", value: 0 });
-    const sum = values.reduce((t, v) => t + v, 0);
+
+    // The month in progress gets its own bar in its own colour rather than being
+    // dropped. Dropping it kept a part-month from reading as a collapse, but it also
+    // hid the biggest month this business has ever had — a worse lie than the one it
+    // was avoiding. Drawn distinctly and labelled, it can be read for what it is.
+    const monthKey = today.slice(0, 7);
+    const mtd = periodTotals(store, { start: `${monthKey}-01`, end: today }).netRevenue;
+
     const recent = periodTotals(store, { start: addDays(today, -89), end: today }).netRevenue;
     const prior = periodTotals(store, { start: addDays(today, -179), end: addDays(today, -90) }).netRevenue;
     return {
-      keys: buckets.map((b) => b.date),
-      values,
+      keys: [...buckets.map((b) => b.date), monthKey],
+      complete: [...values, 0],
+      inProgress: [...values.map(() => 0), mtd],
       best,
-      avg: values.length ? sum / values.length : 0,
+      mtd,
+      monthKey,
       momentum: prior > 0 ? (recent - prior) / prior : null,
       momentumFromNothing: prior <= 0 && recent > 0,
       rangeLabel: buckets.length ? `${monthLabel(buckets[0].date)} – ${monthLabel(buckets[buckets.length - 1].date)}` : "",
@@ -249,16 +258,20 @@ export default function CommandCenter() {
         >
           <BarChart
             labels={monthly.keys}
-            series={[{ name: "Net revenue", color: "var(--s1)", values: monthly.values }]}
+            series={[
+              { name: "Complete months", color: "var(--s1)", values: monthly.complete },
+              { name: `${monthLabel(monthly.monthKey)} so far`, color: "#86b6ef", values: monthly.inProgress },
+            ]}
             xFmt={(k) => monthLabel(k, monthSpan !== 12)}
             yFmt={fmtUsdCompact}
             height={196}
-            showLegend={false}
-            directLabelIndex={monthly.values.length - 1}
+            directLabelIndex={monthly.keys.length - 1}
           />
           <div className="grid cols-3" style={{ gap: 8, marginTop: 10 }}>
-            <MiniStat label="Best month" value={fmtUsdCompact(monthly.best.value)} sub={monthLabel(monthly.best.date, true)} />
-            <MiniStat label="Monthly average" value={fmtUsdCompact(monthly.avg)} />
+            <MiniStat label={`${monthLabel(monthly.monthKey)} so far`} value={fmtUsdCompact(monthly.mtd)}
+              tone={monthly.mtd > monthly.best.value ? "good" : undefined}
+              sub={monthly.mtd > monthly.best.value ? "best month shown" : undefined} />
+            <MiniStat label="Best complete month" value={fmtUsdCompact(monthly.best.value)} sub={monthLabel(monthly.best.date, true)} />
             <MiniStat
               label="Last 90d vs prior 90d"
               value={

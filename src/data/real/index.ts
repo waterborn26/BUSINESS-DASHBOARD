@@ -1,7 +1,7 @@
 // WaterBorn Workshop — real Shopify data.
 //
-// Snapshot pulled from the connected Shopify store on 2026-08-20 via the Admin API.
-// Totals reconcile to Shopify's own reported figures: 878 orders, $57,171.45 gross.
+// Snapshot pulled from the connected Shopify store on 2026-10-28 via the Admin API.
+// Totals reconcile to Shopify's own reported figures: 1,012 orders, $64,453.51 gross.
 //
 // This is a SNAPSHOT, not a live feed. The runtime connector in src/connectors/shopify.ts
 // refreshes it from the Admin API; until that runs, these numbers are as of the pull date.
@@ -96,7 +96,7 @@ export const REAL_META = {
   shopName: "WaterBorn Workshop",
   domain: "waterbornworkshop.com",
   currency: "USD",
-  snapshotDate: "2026-10-07",
+  snapshotDate: "2026-10-28",
   firstDay: REAL_DAYS[0]?.date ?? "",
-  lastDay: "2026-10-06",
+  lastDay: "2026-10-27",
 } as const;
