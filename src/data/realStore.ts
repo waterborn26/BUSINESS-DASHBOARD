@@ -225,6 +225,7 @@ export function buildRealStore(): Store {
       inventory: false,
       expenses: false,
       units: false,
+      fees: false,  // Shopify Payments fees need a scope this connection lacks
     },
     today, start, days,
     siteUpdateDay: "",

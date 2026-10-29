@@ -304,14 +304,21 @@ export default function CommandCenter() {
           current={c.netRevenue} base={p.netRevenue}
           note={<span className="muted">{fmtUsdCompact(c.netRevenue / periodDays)}/day avg</span>}
           onClick={() => app.navigate("sales")} size="lg" />
-        {cap.cogs ? (
+        {!cap.cogs ? (
+          <UnknownTile label="Contribution profit" needs="product costs"
+            onClick={() => app.navigate("datasources")} />
+        ) : cap.fees ? (
           <StatTile label="Contribution profit" value={fmtUsdCompact(c.contributionProfit)} spark={spark.contribution_profit}
             current={c.contributionProfit} base={p.contributionProfit} accent="var(--s3)"
             note={<span className="muted">{fmtPct(c.contributionMarginPct, 0)} margin</span>}
             onClick={() => app.navigate("pnl")} size="lg" />
         ) : (
-          <UnknownTile label="Contribution profit" needs="product costs"
-            onClick={() => app.navigate("datasources")} />
+          /* Costs are known but processing and fulfilment are not, so contribution
+             cannot be stated. Gross profit can, and is the honest figure here. */
+          <StatTile label="Gross profit" value={fmtUsdCompact(c.grossProfit)} spark={spark.gross_profit}
+            current={c.grossProfit} base={p.grossProfit} accent="var(--s3)"
+            note={<span className="muted">{fmtPct(c.grossMarginPct, 0)} margin · before fees</span>}
+            onClick={() => app.navigate("pnl")} size="lg" />
         )}
         <StatTile label="Orders" value={fmtNum(c.orders)} spark={spark.orders}
           current={c.orders} base={p.orders} note={<span className="muted">AOV {fmtUsd(c.aov)}</span>}
@@ -592,6 +599,7 @@ const CAP_SHORT: Record<keyof Capabilities, string> = {
   inventory: "Inventory",
   expenses: "Expenses",
   units: "Unit quantities",
+  fees: "Processing fees",
 };
 
 /**

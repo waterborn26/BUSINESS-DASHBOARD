@@ -6,6 +6,8 @@ import { describe, expect, it } from "vitest";
 import { buildRealStore } from "@/data/realStore";
 import { getStore } from "@/data/store";
 import { availableCash } from "@/engines/cash";
+import { cashForecast } from "@/engines/cashflow";
+import { periodTotals } from "@/engines/analytics";
 
 describe("obligations only ever come from the dataset's own records", () => {
   const real = buildRealStore();
@@ -33,5 +35,37 @@ describe("obligations only ever come from the dataset's own records", () => {
     const fixed = availableCash(demo, demo.today).deductions
       .find((d) => d.label === "Next-30-day fixed obligations");
     expect(fixed?.amount).toBeGreaterThan(100_000);
+  });
+});
+
+describe("nothing is assumed where there is no number to read", () => {
+  const real = buildRealStore();
+
+  it("does not forecast the simulated brand's payroll, loan or owner draw", () => {
+    // The forecast added them on fixed days of the month regardless of dataset,
+    // the same fault the cash panel had.
+    const fc = cashForecast(real, 90);
+    const demoMonthlyFixed = 1_175_000; // DAY2 + loan, in cents
+    expect(fc.expectedExpenses30).toBeLessThan(demoMonthlyFixed);
+    for (const pt of fc.points) expect(Number.isFinite(pt.cash)).toBe(true);
+  });
+
+  it("will not call gross profit 'contribution profit' when fees are unmeasured", () => {
+    expect(real.capabilities.fees).toBe(false);
+    const t = periodTotals(real, { start: "2026-01-01", end: real.today });
+    // With fees, fulfilment and ad spend all unknown they read as zero, which makes
+    // contribution identical to gross. The figure is fine; the label would not be.
+    expect(t.contributionProfit).toBe(t.grossProfit);
+  });
+
+  it("keeps every capability false unless the data really carries it", () => {
+    const c = real.capabilities;
+    expect(c.cogs).toBe(true);     // Shopify reports cost of goods
+    expect(c.cash).toBe(false);
+    expect(c.fees).toBe(false);
+    expect(c.expenses).toBe(false);
+    expect(c.sessions).toBe(false);
+    expect(c.adSpend).toBe(false);
+    expect(c.units).toBe(false);
   });
 });

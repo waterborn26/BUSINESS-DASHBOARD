@@ -99,6 +99,7 @@ export interface CashForecast {
  * bills, sales-tax remittances, CC payments, loan, owner draws.
  */
 export function cashForecast(store: Store, horizonDays: number, threshold = CASH_FLOOR): CashForecast {
+  const hasFixedCosts = store.capabilities.expenses;
   const today = store.today;
   // Daily net cash-in from sales ≈ forecast net revenue × (1 − fee rate), lagged 2 days.
   const hist = dateRange(addDays(today, -119), today).map((d) => {
@@ -153,13 +154,15 @@ export function cashForecast(store: Store, horizonDays: number, threshold = CASH
     deductionStack += adAccrual;
     if (dom === 1) { ccOwed += monthlySubs; deductionStack += monthlySubs; }
     if (dom === 15) { outflow += ccOwed; out30Track(i, ccOwed); discharge(ccOwed); ccOwed = 0; }
-    if (dom === 2) { outflow += DAY2_OBLIGATIONS; out30Track(i, DAY2_OBLIGATIONS); }
+    // Only a dataset that records expenses has these. Adding them to one that does
+    // not invents the obligations, and then forecasts a cash crisis from them.
+    if (hasFixedCosts && dom === 2) { outflow += DAY2_OBLIGATIONS; out30Track(i, DAY2_OBLIGATIONS); }
     if (dom === 3) { const f = Math.round(inflow * 0.06) * 30; outflow += f; out30Track(i, f); } // 3PL monthly approx
     if (dom === 5) {
-      const d5 = MONTHLY_OBLIGATIONS.loanPayment + MONTHLY_OBLIGATIONS.bankFees;
+      const d5 = hasFixedCosts ? MONTHLY_OBLIGATIONS.loanPayment + MONTHLY_OBLIGATIONS.bankFees : 0;
       outflow += d5; out30Track(i, d5);
     }
-    if (dom === 28) { outflow += MONTHLY_OBLIGATIONS.ownerDraw; out30Track(i, MONTHLY_OBLIGATIONS.ownerDraw); }
+    if (hasFixedCosts && dom === 28) { outflow += MONTHLY_OBLIGATIONS.ownerDraw; out30Track(i, MONTHLY_OBLIGATIONS.ownerDraw); }
     // Sales tax remitted on the 20th (accrued balance)
     if (dom === 20 && taxAccrued > 0) {
       outflow += taxAccrued;

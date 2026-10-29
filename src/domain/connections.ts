@@ -75,7 +75,14 @@ export const CONNECTIONS: ConnectionSpec[] = [
     feeds: ["cash", "expenses"],
   },
   {
-    id: "stripe", name: "Stripe / payment processor", group: "Money",
+    id: "fees", name: "Payment processing fees", group: "Money",
+    state: "none", effort: "build",
+    unlocks: "Contribution profit — gross profit after the cut the processor takes. Until this is in, profit is stated before fees and labelled that way.",
+    requires: "The read_shopify_payments scope on the Shopify app. The current connection does not carry it, so fees cannot be read at all today — they are not being assumed as zero.",
+    feeds: ["fees"],
+  },
+  {
+    id: "stripe", name: "Stripe / other processors", group: "Money",
     state: "none", effort: "build",
     unlocks: "Processing fees, payout timing, money in transit, settlement reconciliation.",
     requires: "A restricted Stripe API key. Shopify Payments data comes with the Admin token instead.",
@@ -112,10 +119,10 @@ export const CONNECTIONS: ConnectionSpec[] = [
     feeds: [],
   },
   {
-    id: "klaviyo", name: "Klaviyo / email", group: "Marketing",
+    id: "privy", name: "Privy — email & SMS", group: "Marketing",
     state: "none", effort: "build",
-    unlocks: "List growth, flow and campaign revenue, and email's real share rather than its attributed one.",
-    requires: "A Klaviyo private API key.",
+    unlocks: "List growth, pop-up and flow conversion, campaign revenue, and email's real share of sales rather than its attributed one.",
+    requires: "A Privy API key from Account → Integrations. Privy's reporting API is thinner than Klaviyo's, so campaign-level revenue may need matching against Shopify orders by discount code.",
     feeds: [],
   },
 

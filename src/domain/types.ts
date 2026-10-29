@@ -364,12 +364,18 @@ export interface Capabilities {
   expenses: boolean;
   /** Per-line unit quantities are known. Gates units sold and items per order. */
   units: boolean;
+  /**
+   * Payment processing and fulfilment costs are known. Gates contribution profit.
+   * Without it those costs are not zero, they are unmeasured — and subtracting
+   * nothing from gross profit silently reports gross profit under another name.
+   */
+  fees: boolean;
 }
 
 /** Everything present — the demo dataset simulates a fully connected business. */
 export const ALL_CAPABILITIES: Capabilities = {
   cash: true, cogs: true, sessions: true, adSpend: true,
-  customers: true, inventory: true, expenses: true, units: true,
+  customers: true, inventory: true, expenses: true, units: true, fees: true,
 };
 
 /** Human-readable reason a metric is unavailable, and what would fix it. */
@@ -382,4 +388,5 @@ export const CAPABILITY_LABELS: Record<keyof Capabilities, { needs: string; gate
   inventory: { needs: "stock levels", gates: "inventory value and reorder planning" },
   expenses: { needs: "expense records", gates: "operating profit and expense analysis" },
   units: { needs: "line-item quantities", gates: "units sold and items per order" },
+  fees: { needs: "payment processing costs", gates: "contribution profit" },
 };
