@@ -590,3 +590,20 @@ a.link:hover { text-decoration: underline; }
   }
   .act-impact .impact-track { flex: 1; margin-top: 0; }
 }
+
+/* ── Connections hub ──────────────────────────────────────── */
+.conn-head { display: flex; gap: 24px; align-items: center; flex-wrap: wrap; margin-bottom: 16px; }
+.conn-grid { display: grid; gap: 10px; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); }
+.conn {
+  border: 1px solid var(--border); border-radius: var(--radius-sm);
+  padding: 11px 13px; background: var(--surface-2);
+  border-left: 3px solid var(--baseline);
+}
+.conn.connected { border-left-color: var(--good); }
+.conn.partial { border-left-color: var(--warning); }
+.conn-title { display: flex; align-items: center; gap: 8px; font-size: 12.5px; }
+.conn-title .badge { margin-left: auto; flex-shrink: 0; }
+.conn-unlocks { font-size: 11.5px; color: var(--ink-2); margin-top: 6px; line-height: 1.5; }
+.conn-req { font-size: 11px; color: var(--ink-3); margin-top: 7px; line-height: 1.5; }
+.conn-req .badge { margin-right: 5px; }
+@media (max-width: 760px) { .conn-grid { grid-template-columns: minmax(0, 1fr); } }

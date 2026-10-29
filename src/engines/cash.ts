@@ -66,11 +66,15 @@ export function availableCash(store: Store, asOf: string): AvailableCashBreakdow
     .filter((po) => po.status === "deposit_paid" || po.status === "in_transit")
     .reduce((t, po) => t + (po.total - po.paid), 0);
 
-  // Upcoming recurring obligations in the next 30 days (subscriptions, contractors,
-  // payroll, rent, insurance, loan). Shares constants with the generator and forecaster.
+  // Upcoming recurring obligations in the next 30 days. The payroll, rent, contractor
+  // and loan constants describe the SIMULATED brand; a dataset with no expense records
+  // has none of them, and adding them there invents $11k of debt the business does not
+  // owe — which is exactly what it did, at the top of the home screen.
   const monthlyRecurring = store.recurring.filter((r) => r.active && r.cadence === "monthly")
     .reduce((t, r) => t + r.amount, 0);
-  const upcomingFixed = monthlyRecurring + DAY2_OBLIGATIONS + MONTHLY_OBLIGATIONS.loanPayment;
+  const upcomingFixed = store.capabilities.expenses
+    ? monthlyRecurring + DAY2_OBLIGATIONS + MONTHLY_OBLIGATIONS.loanPayment
+    : monthlyRecurring;
 
   // Jurisdictions with an outstanding balance, named from the data rather than assumed.
   const owingJurisdictions = [...new Set(
@@ -87,14 +91,21 @@ export function availableCash(store: Store, asOf: string): AvailableCashBreakdow
         : "Collected, not yet remitted",
       drill: { kind: "taxes" },
     },
-    { label: "Estimated income tax reserve", amount: incomeReserve, provenance: "estimate", detail: `${store.incomeTaxRatePct}% of YTD estimated profit less estimated payments`, drill: { kind: "taxes" } },
+    {
+      label: "Estimated income tax reserve", amount: incomeReserve, provenance: "estimate",
+      detail: store.capabilities.expenses
+        ? `${store.incomeTaxRatePct}% of YTD estimated profit less estimated payments`
+        : `${store.incomeTaxRatePct}% of YTD profit before operating costs — no expenses are recorded, so this is an upper bound`,
+      drill: { kind: "taxes" },
+    },
     { label: "Credit card balance (Amex)", amount: ccBalance, provenance: "computed", drill: { kind: "account", id: "cc_amex" } },
     { label: "Vendor bills payable", amount: ap + openBills, provenance: "computed", detail: "Accounts payable plus open manual invoices", drill: { kind: "payables" } },
     { label: "Committed purchase orders", amount: poCommitments, provenance: "computed", detail: "Unpaid balances on POs in production or transit", drill: { kind: "payables" } },
     { label: "Next-30-day fixed obligations", amount: upcomingFixed, provenance: "computed", detail: "Subscriptions, contractors, payroll, rent, insurance, loan payment", drill: { kind: "expenses" } },
   ];
 
-  const obligationsTotal = deductions.reduce((t, d) => t + d.amount, 0);
+  const shown = deductions.filter((d) => d.amount !== 0);
+  const obligationsTotal = shown.reduce((t, d) => t + d.amount, 0);
   const cashKnown = cashAccounts.length > 0;
   // With no cash source, "available" is not a number we are entitled to state.
   const available = cashKnown ? total - obligationsTotal : 0;
@@ -105,7 +116,7 @@ export function availableCash(store: Store, asOf: string): AvailableCashBreakdow
     cashAccounts,
     totalCash: total,
     inTransit: { label: "Processor clearing (in transit)", amount: clearing, provenance: "computed", detail: "Recent sales not yet paid out by Shopify Payments" },
-    deductions,
+    deductions: shown,
     availableCash: available,
   };
 }

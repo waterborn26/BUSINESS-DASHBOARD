@@ -4,6 +4,7 @@ import React, { useMemo } from "react";
 import { useApp } from "@/state/AppContext";
 import { Card } from "@/components/ui";
 import { dataQuality } from "@/engines/reconcile";
+import { CONNECTIONS, CONNECTION_GROUPS, EFFORT_COPY, type ConnectionState } from "@/domain/connections";
 
 const STATUS_BADGE: Record<string, { cls: string; label: string }> = {
   connected: { cls: "good", label: "connected" },
@@ -12,14 +13,70 @@ const STATUS_BADGE: Record<string, { cls: string; label: string }> = {
   error: { cls: "critical", label: "error" },
 };
 
+const STATE_COPY: Record<ConnectionState, { label: string; cls: string }> = {
+  connected: { label: "connected", cls: "good" },
+  partial: { label: "partial", cls: "imported" },
+  none: { label: "not connected", cls: "" },
+};
+
 export default function DataSources() {
   const { store } = useApp();
   const quality = useMemo(() => dataQuality(store), [store]);
   const categories = useMemo(() => [...new Set(store.connectors.map((c) => c.category))], [store]);
 
+  const live = CONNECTIONS.filter((c) => c.state !== "none").length;
+  const readyNow = CONNECTIONS.filter((c) => c.state === "none" && c.effort === "ready");
+
   return (
     <>
-      <Card title="Connectors">
+      <Card title="Connections">
+        <div className="conn-head">
+          <div>
+            <div className="hero-figure" style={{ fontSize: 34 }}>{live}<span className="muted" style={{ fontSize: 17, fontWeight: 400 }}> of {CONNECTIONS.length}</span></div>
+            <div className="muted" style={{ fontSize: 12 }}>sources feeding the dashboard</div>
+          </div>
+          <p className="muted" style={{ fontSize: 12.5, lineHeight: 1.6, flex: 1, minWidth: 280 }}>
+            Every source normalises into the same entities, so each one switches on the
+            same analytics. Credentials live in the macOS Keychain, never in the database
+            or a config file. What differs between them is not usefulness but what it
+            takes to turn them on — which is what the badges say.
+          </p>
+        </div>
+
+        {readyNow.length > 0 && (
+          <div className="insight info" style={{ marginBottom: 14 }}>
+            <div className="insight-title">Start here</div>
+            <div className="insight-detail">
+              {readyNow.map((c) => c.name).join(" · ")} — {readyNow.length === 1 ? "this needs" : "these need"} only
+              a file or a token, and {readyNow.length === 1 ? "it unlocks" : "they unlock"} more than everything blocked behind an app review combined.
+            </div>
+          </div>
+        )}
+
+        {CONNECTION_GROUPS.map((g) => (
+          <div key={g} style={{ marginBottom: 16 }}>
+            <div className="band-title" style={{ marginBottom: 8 }}>{g}</div>
+            <div className="conn-grid">
+              {CONNECTIONS.filter((c) => c.group === g).map((c) => {
+                const st = STATE_COPY[c.state];
+                const ef = EFFORT_COPY[c.effort];
+                return (
+                  <div key={c.id} className={`conn ${c.state}`}>
+                    <div className="conn-title">
+                      <strong>{c.name}</strong>
+                      <span className={`badge ${st.cls}`}>{st.label}</span>
+                    </div>
+                    <div className="conn-unlocks">{c.unlocks}</div>
+                    <div className="conn-req"><span className={`badge ${ef.cls}`}>{ef.label}</span> {c.requires}</div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        ))}
+      </Card>
+
+      <Card title="Connector sync state">
         <p className="muted" style={{ fontSize: 12.5, marginBottom: 12 }}>
           Modular connector architecture: every source normalizes into the same entities (orders,
           transactions, ledger entries, spend, traffic…), so all analytics work identically regardless of
