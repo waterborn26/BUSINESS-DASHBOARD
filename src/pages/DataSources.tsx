@@ -1,10 +1,12 @@
 // Data Sources — connector status, sync health, and data-quality transparency.
 
-import React, { useMemo } from "react";
+import React, { useMemo, useState } from "react";
 import { useApp } from "@/state/AppContext";
 import { Card } from "@/components/ui";
 import { dataQuality } from "@/engines/reconcile";
-import { CONNECTIONS, CONNECTION_GROUPS, EFFORT_COPY, type ConnectionState } from "@/domain/connections";
+import { CONNECTIONS, CONNECTION_GROUPS, EFFORT_COPY, type ConnectionSpec, type ConnectionState } from "@/domain/connections";
+import { GUIDES } from "@/domain/connectionGuides";
+import { ConnectWizard } from "@/components/ConnectWizard";
 
 const STATUS_BADGE: Record<string, { cls: string; label: string }> = {
   connected: { cls: "good", label: "connected" },
@@ -24,11 +26,13 @@ export default function DataSources() {
   const quality = useMemo(() => dataQuality(store), [store]);
   const categories = useMemo(() => [...new Set(store.connectors.map((c) => c.category))], [store]);
 
+  const [wizard, setWizard] = useState<ConnectionSpec | null>(null);
   const live = CONNECTIONS.filter((c) => c.state !== "none").length;
   const readyNow = CONNECTIONS.filter((c) => c.state === "none" && c.effort === "ready");
 
   return (
     <>
+      {wizard && <ConnectWizard spec={wizard} onClose={() => setWizard(null)} />}
       <Card title="Connections">
         <div className="conn-head">
           <div>
@@ -68,6 +72,11 @@ export default function DataSources() {
                     </div>
                     <div className="conn-unlocks">{c.unlocks}</div>
                     <div className="conn-req"><span className={`badge ${ef.cls}`}>{ef.label}</span> {c.requires}</div>
+                    {GUIDES[c.id] && (
+                      <button className={`btn ${c.effort === "ready" ? "primary" : ""} conn-cta`} onClick={() => setWizard(c)}>
+                        {c.state === "connected" ? "Setup steps" : "Set up"} · {GUIDES[c.id].minutes} min
+                      </button>
+                    )}
                   </div>
                 );
               })}

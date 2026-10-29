@@ -607,3 +607,39 @@ a.link:hover { text-decoration: underline; }
 .conn-req { font-size: 11px; color: var(--ink-3); margin-top: 7px; line-height: 1.5; }
 .conn-req .badge { margin-right: 5px; }
 @media (max-width: 760px) { .conn-grid { grid-template-columns: minmax(0, 1fr); } }
+
+/* ── Connect wizard ───────────────────────────────────────── */
+.wizard {
+  position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+  width: min(620px, calc(100vw - 32px)); max-height: min(86vh, 760px); overflow-y: auto;
+  background: var(--surface); border: 1px solid var(--border-strong);
+  border-radius: var(--radius); padding: 18px 20px; z-index: 90;
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.5);
+}
+.wizard-head { display: flex; gap: 14px; align-items: flex-start; margin-bottom: 14px; }
+.wizard-head h2 { font-size: 16px; }
+.wizard-head .sub { color: var(--ink-2); font-size: 12.5px; margin-top: 3px; line-height: 1.5; }
+.wizard-head .btn { margin-left: auto; flex-shrink: 0; }
+.wizard-meta { display: flex; align-items: center; gap: 10px; font-size: 11px; margin-bottom: 12px; }
+
+.wizard-steps { list-style: none; display: flex; flex-direction: column; gap: 10px; }
+.wizard-steps li { display: flex; gap: 10px; align-items: flex-start; }
+.wizard-steps li.on .step-text { color: var(--ink-3); text-decoration: line-through; }
+.step-check {
+  flex-shrink: 0; width: 22px; height: 22px; border-radius: 50%;
+  border: 1px solid var(--border-strong); background: var(--surface-2);
+  color: var(--ink-2); font-size: 11px; font-weight: 700; cursor: pointer;
+  display: grid; place-items: center; font-family: inherit;
+}
+.wizard-steps li.on .step-check { background: var(--good); border-color: var(--good); color: #fff; }
+.step-text { font-size: 12.5px; line-height: 1.55; color: var(--ink); }
+
+.wizard-finish { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--border); }
+.wizard-finish input[type="password"], .wizard-finish input[type="file"] {
+  width: 100%; margin-top: 7px; padding: 8px 10px; font-family: var(--mono); font-size: 12px;
+  background: var(--surface-2); border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm); color: var(--ink);
+}
+.wizard-actions { display: flex; align-items: center; gap: 10px; margin-top: 10px; flex-wrap: wrap; }
+.wizard-finish .muted { font-size: 11.5px; margin-top: 9px; line-height: 1.55; }
+.conn-cta { margin-top: 10px; width: 100%; justify-content: center; }
