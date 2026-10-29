@@ -14,7 +14,14 @@ export interface PeriodTotals {
   discounts: number;
   refunds: number;
   shippingRev: number;
-  netRevenue: number;       // gross − discounts − refunds + shipping
+  /**
+   * Shopify's "Net sales" exactly: gross − discounts − refunds. Shipping is NOT in
+   * here. It used to be, which made every revenue figure disagree with the Shopify
+   * dashboard by the shipping charged — the first thing anyone checks.
+   */
+  netRevenue: number;
+  /** Shopify's "Total sales": net sales + shipping + tax. Its headline figure. */
+  totalSales: number;
   taxCollected: number;
   fees: number;
   cogs: number;
@@ -55,12 +62,13 @@ export function periodTotals(store: Store, p: Period): PeriodTotals {
     acc.fulfillment += r.fulfillment; acc.adSpend += r.adSpend;
     acc.sessions += r.sessions; acc.newCustomers += r.newCustomers;
   }
-  const netRevenue = acc.gross - acc.discounts - acc.refunds + acc.shippingRev;
+  const netRevenue = acc.gross - acc.discounts - acc.refunds;
   const grossProfit = netRevenue - acc.cogs;
   const contributionProfit = grossProfit - acc.fees - acc.fulfillment - acc.adSpend;
   return {
     ...acc,
     netRevenue,
+    totalSales: netRevenue + acc.shippingRev + acc.taxCollected,
     aov: acc.orders ? Math.round(netRevenue / acc.orders) : 0,
     itemsPerOrder: acc.orders ? acc.units / acc.orders : 0,
     conversion: acc.sessions ? acc.orders / acc.sessions : 0,

@@ -1,7 +1,9 @@
 // WaterBorn Workshop — real Shopify data.
 //
 // Snapshot pulled from the connected Shopify store on 2026-10-28 via the Admin API.
-// Totals reconcile to Shopify's own reported figures: 1,012 orders, $64,453.51 gross.
+// Totals reconcile to Shopify's own reported figures: 1,042 orders, $65,590.71 gross.
+// A snapshot's LAST day is partial: Oct 27 read 27 orders mid-afternoon and closed
+// at 30, so a refresh must rewrite the previous final day, not just append to it.
 //
 // This is a SNAPSHOT, not a live feed. The runtime connector in src/connectors/shopify.ts
 // refreshes it from the Admin API; until that runs, these numbers are as of the pull date.
@@ -123,9 +125,9 @@ export const REAL_META = {
   shopName: "WaterBorn Workshop",
   domain: "waterbornworkshop.com",
   currency: "USD",
-  snapshotDate: "2026-10-28",
+  snapshotDate: "2026-10-29",
   firstDay: REAL_DAYS[0]?.date ?? "",
-  lastDay: "2026-10-27",
+  lastDay: "2026-10-28",
   /**
    * Share of net sales with a cost behind them. Shopify has no cost on the rest —
    * chiefly the $17.1k sold under deleted product titles — so any margin shown for a

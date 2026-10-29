@@ -92,7 +92,7 @@ npm run build    # production web bundle
 
 The top-bar selector switches between:
 
-- **WaterBorn Workshop** — your real Shopify history. 1,012 orders and $64,454 gross since
+- **WaterBorn Workshop** — your real Shopify history. 1,042 orders and $65,591 gross since
   Aug 2023, reconciled to Shopify's own reported totals. This is the default.
 - **Demo dataset** — a fully-connected simulated brand, useful for seeing every feature
   populated.
@@ -176,7 +176,7 @@ Highlights:
 
 ## Financial correctness is tested, not asserted
 
-`npm test` runs 64 tests covering ledger integrity, business plausibility, forecast
+`npm test` runs 69 tests covering ledger integrity, business plausibility, forecast
 behavior, scenario modelling, and every demo storyline:
 
 - trial balance is exactly 0; cash-flow statement ties opening + O + I + F = closing

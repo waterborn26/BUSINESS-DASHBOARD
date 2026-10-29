@@ -39,6 +39,7 @@ export default function Sales() {
         <Kpi label="Refunds" value={fmtUsdCompact(c.refunds)} current={c.refunds} base={base.refunds} invert sub={<span>{fmtPct(c.refundRatePct, 1)}</span>} />
         <Kpi label="Shipping revenue" value={fmtUsdCompact(c.shippingRev)} current={c.shippingRev} base={base.shippingRev} />
         <Kpi label="Net sales" value={fmtUsdCompact(c.netRevenue)} current={c.netRevenue} base={base.netRevenue} />
+        <Kpi label="Total sales" value={fmtUsdCompact(c.totalSales)} current={c.totalSales} base={base.totalSales} sub={<span className="muted">incl. shipping + tax</span>} />
         <Kpi label="Taxes collected" value={fmtUsdCompact(c.taxCollected)} provenance="imported" />
         <Kpi label="Orders" value={fmtNum(c.orders)} current={c.orders} base={base.orders} />
         {cap.units
@@ -104,15 +105,24 @@ export default function Sales() {
       </div>
 
       <Card title="Sales bridge — gross to net">
+        {/* Same order and the same names Shopify uses, so the two can be read
+            side by side without translating between them. */}
         <div className="stmt" style={{ maxWidth: 480 }}>
           <StmtRow label="Gross sales" amount={c.gross} />
           <StmtRow label="Discounts" amount={c.discounts} neg indent />
           <StmtRow label="Refunds" amount={c.refunds} neg indent />
-          <StmtRow label="Shipping revenue" amount={c.shippingRev} indent />
-          <StmtRow label="Net sales" amount={c.netRevenue} total />
+          <StmtRow label="Net sales" amount={c.netRevenue} subtotal />
+          <StmtRow label="Shipping charges" amount={c.shippingRev} indent />
+          <StmtRow label="Taxes" amount={c.taxCollected} indent />
+          <StmtRow label="Total sales" amount={c.totalSales} total />
           <div className="stmt-row"><span className="lbl muted">vs {compareMode === "year" ? "same period last year" : "previous period"}</span>
             <Delta current={c.netRevenue} base={base.netRevenue} /></div>
         </div>
+        <p className="muted" style={{ fontSize: 11.5, marginTop: 10 }}>
+          These are Shopify's own definitions. <strong>Net sales</strong> excludes shipping
+          and tax; <strong>Total sales</strong> is the headline figure on the Shopify
+          dashboard. Both should tie out exactly for the same date range.
+        </p>
       </Card>
     </>
   );

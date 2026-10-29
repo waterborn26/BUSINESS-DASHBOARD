@@ -17,7 +17,7 @@ import { dailyBriefing, answerQuestion } from "@/engines/briefing";
 import { inventoryRows } from "@/engines/inventory";
 import { customerKpis } from "@/engines/customers";
 import { trialBalanceError } from "@/engines/ledger";
-import { addDays } from "@/lib/dates";
+import { addDays, type Period } from "@/lib/dates";
 
 const store = buildRealStore();
 const today = store.today;
@@ -34,14 +34,14 @@ describe("real Shopify snapshot", () => {
   it("reconciles to Shopify's own reported totals", () => {
     const orders = REAL_DAYS.reduce((t, d) => t + d.orders, 0);
     const gross = REAL_DAYS.reduce((t, d) => t + d.gross, 0);
-    expect(orders).toBe(1012);
-    expect(gross).toBe(6_445_351); // $64,453.51 as reported by Shopify
+    expect(orders).toBe(1042);
+    expect(gross).toBe(6_559_071); // $65,590.71 — Shopify's figure at the Oct 28 pull
   });
 
   it("carries the real catalog and channel mix", () => {
     expect(REAL_PRODUCTS.length).toBe(87);
     expect(REAL_PRODUCTS.some((p) => p.name === "THE CREEDSMAN BELT")).toBe(true);
-    expect(REAL_CHANNELS.reduce((t, c) => t + c.orders, 0)).toBe(1012);
+    expect(REAL_CHANNELS.reduce((t, c) => t + c.orders, 0)).toBe(1012); // channels last pulled Oct 27
   });
 
   it("parses product names containing dashes intact", () => {
@@ -139,8 +139,8 @@ describe("missing data is reported as unknown, never as a confident number", () 
     expect(sold.some((d) => d.cogs > 0)).toBe(true);
     const cogs = REAL_DAYS.reduce((t, d) => t + d.cogs, 0);
     const gp = REAL_DAYS.reduce((t, d) => t + d.grossProfit, 0);
-    expect(cogs).toBeCloseTo(2_130_102, -2);  // $21,301.02 as Shopify reports it
-    expect(gp).toBeCloseTo(2_584_040, -2);    // $25,840.40
+    expect(cogs).toBeCloseTo(2_182_736, -2);  // $21,827.36 at the Oct 28 pull
+    expect(gp).toBeCloseTo(2_645_124, -2);    // $26,451.24
   });
 
   it("never reports a margin against revenue that carries no cost", () => {
@@ -278,5 +278,29 @@ describe("a period following zero revenue is not reported as flat", () => {
     if (prior > 0 || current <= 0) return; // only meaningful on a zero-base period
     expect(b.headline).not.toMatch(/flat|steady/i);
     expect(b.headline).toMatch(/restarted/i);
+  });
+});
+
+describe("the dashboard agrees with Shopify on the same period", () => {
+  it("matches Shopify's year-to-date line for line", () => {
+    // What the user checks first: Shopify's YTD against Meridian's. These are the
+    // figures Shopify reported for 2026-01-01 to the Oct 28 pull.
+    const ytd = REAL_DAYS.filter((d) => d.date >= "2026-01-01");
+    const sum = (f: (d: typeof ytd[number]) => number) => ytd.reduce((t, d) => t + f(d), 0);
+    expect(sum((d) => d.orders)).toBe(264);
+    expect(sum((d) => d.net)).toBe(1_413_690);        // $14,136.90 net sales
+    expect(sum((d) => d.shipping)).toBe(161_076);     // $1,610.76 shipping
+    expect(sum((d) => d.taxes)).toBe(28_612);         // $286.12 tax
+    expect(sum((d) => d.cogs)).toBeCloseTo(641_628, -2);
+    expect(sum((d) => d.grossProfit)).toBeCloseTo(667_722, -2);
+  });
+
+  it("reports net sales the way Shopify does, without shipping in it", () => {
+    // Including shipping made every revenue figure differ from the Shopify
+    // dashboard by exactly the shipping charged.
+    const ytd: Period = { start: "2026-01-01", end: store.today };
+    const t = periodTotals(store, ytd);
+    expect(t.netRevenue).toBe(1_413_690);                       // Shopify "Net sales"
+    expect(t.totalSales).toBe(1_413_690 + 161_076 + 28_612);    // Shopify "Total sales"
   });
 });
